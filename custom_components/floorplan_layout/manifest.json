@@ -1,0 +1,11 @@
+{
+  "domain": "floorplan_layout",
+  "name": "2D Floorplan Layout",
+  "version": "0.1.0",
+  "codeowners": ["@Cagiva-Raptor"],
+  "config_flow": true,
+  "documentation": "https://github.com/Cagiva-Raptor/2d-floorplan-editor",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": []
+}

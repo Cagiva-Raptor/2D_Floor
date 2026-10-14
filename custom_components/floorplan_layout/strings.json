@@ -1,0 +1,61 @@
+{
+  "title": "2D Floorplan Layout",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wat wil je toevoegen?",
+        "description": "Een dashboard beschrijven, of de opslag van een plattegrond.",
+        "data": {
+          "soort": "Soort"
+        }
+      },
+      "layout": {
+        "title": "2D floorplan storage",
+        "description": "Where the layout of your floorplan should be kept.\n\nFor example `{example}` is stored as `{example}/2d-floorplan.json`.",
+        "data": {
+          "name": "Name",
+          "folder": "Folder"
+        }
+      },
+      "dashboard": {
+        "title": "Dashboard beschrijven",
+        "description": "Het pad is het adres van je dashboard, dus wat er achter `lovelace/` staat. `2d-floorplan` betekent `/lovelace/2d-floorplan`.\n\nDe entities worden uit het dashboard gelezen en in het script gezet. Wat er daarna in staat, is van jou.",
+        "data": {
+          "dashboard_bestand": "Dashboardpad",
+          "dashboard_naam": "Dashboardnaam",
+          "tijdvakken": "Tijdvakken"
+        }
+      }
+    },
+    "error": {
+      "cannot_read": "Dashboard onleesbaar"
+    },
+    "abort": {
+      "already_configured": "This entry is already set up.",
+      "already_in_progress": "Another dialog for this dashboard is still open. Close it and try again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Editor",
+        "description": "Het script staat op `{file}` ({summary}).\n\nOnbekende entities: {unknown}. Die bestaan niet in Home Assistant; meestal een typefout.\n\nNiet bereikbaar: {unreachable}. Die bestaan wel, maar staan op unavailable — de lamp is uit of de integratie is eruit.\n\nBeide zijn een waarschuwing, geen fout. Alles wat je hier opslaat wordt ongewijzigd weggeschreven.",
+        "data": {
+          "tijdvakken": "Tijdvakken",
+          "script": "Script"
+        }
+      }
+    },
+    "abort": {
+      "not_dashboard": "Deze entry is geen dashboard."
+    }
+  },
+  "selector": {
+    "soort": {
+      "options": {
+        "dashboard": "Dashboard beschrijven",
+        "layout": "Opslag van een plattegrond"
+      }
+    }
+  }
+}

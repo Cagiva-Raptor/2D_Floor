@@ -1,0 +1,44 @@
+# Alles negeren; hieronder komt alleen het 2D-vloerplan-project terug.
+# Zo kan er nooit per ongeluk iets van het huis in de repo belanden:
+# secrets.yaml, .storage, de database en alle andere configuratie vallen
+# buiten deze witlijst.
+*
+!.gitignore
+
+# --- de editor ---
+!www/
+!www/floorplan-editor-prototype/
+!www/floorplan-editor-prototype/index.html
+!www/floorplan-editor-prototype/iconen.json
+!www/floorplan-editor-prototype/favicon.png
+!www/floorplan-editor-prototype/apple-touch-icon.png
+!www/floorplan-editor-prototype/logo_2dfloorplan.png
+!www/floorplan-editor-prototype/logo_2dfloorplan.jpeg
+
+# --- de integratie ---
+!custom_components/
+!custom_components/floorplan_layout/
+!custom_components/floorplan_layout/*.py
+!custom_components/floorplan_layout/manifest.json
+!custom_components/floorplan_layout/strings.json
+!custom_components/floorplan_layout/translations/
+!custom_components/floorplan_layout/translations/*.json
+!custom_components/floorplan_layout/logo_2dfloorplan.png
+!custom_components/floorplan_layout/logo_2dfloorplan.jpeg
+
+# --- de kaartmodule ---
+!floorplan/
+!floorplan/2d-floorplan.js
+
+# Wat er buiten blijft, en waarom:
+#  * de momentopnamen van het huis (entiteiten.json, apparaten.json,
+#    statussen.json, plattegrond.json, herkend.json, zones.json):
+#    daarin staan duizenden entiteitsnamen, cameras en namen van personen.
+#    Dit is een openbare repo — die horen er niet in.
+#  * floorplan/*.settings.json en *.zones.json: werking van deze installatie.
+#  * backups/, *.bak*, __pycache__/, *.pyc: rommel of dubbel.
+www/floorplan-editor-prototype/backups/
+www/floorplan-editor-prototype/*.json.bak*
+www/floorplan-editor-prototype/*.json.bak.*
+www/floorplan-editor-prototype/*.html.bak*
+custom_components/floorplan_layout/__pycache__/

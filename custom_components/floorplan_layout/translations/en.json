@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "2D floorplan storage",
+        "description": "Where the layout of your floorplan should be kept. The card in your dashboard asks for it by the name below.\n\nFor example `{example}` is stored as `{example}/2d-floorplan.json`.",
+        "data": {
+          "name": "Name",
+          "folder": "Folder"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This floorplan is already set up.",
+      "already_in_progress": "Another dialog for this floorplan is still open. Close it and try again."
+    }
+  }
+}
