@@ -179,6 +179,9 @@
     color: var(--tekst-dim); margin: 0; font-weight: 600;
   }
   .paneel-sluit { min-width: 22px; padding: 0 5px; line-height: 1.25; }
+  /* De stijlkeuze voor de voorwerpen staat alleen bij die lijst. */
+  #voorwerp-stijl-vak.verborgen { display: none; }
+  #voorwerp-stijl { max-width: 190px; }
   .sectie.rooster { flex: 1; overflow-y: auto; gap: 3px; }
   .legenda { font-size: 11.5px; color: var(--tekst-dim); }
 
@@ -807,7 +810,13 @@
                 title="entities — de lijst toont alle losse entities"></button>
         <button id="wijz-helpers"
                 title="helpers — de lijst toont de entiteiten zonder apparaat"></button>
+        <button id="wijz-voorwerpen"
+                title="voorwerpen — bedden, kasten, lampen, ventilatoren en meer op de kaart"></button>
       </div>
+      <label class="klein verborgen" id="voorwerp-stijl-vak"
+             title="waarmee de voorwerpen getekend worden — de keuze geldt voor wat u hierna plaatst">
+        <select id="voorwerp-stijl"></select> stijl
+      </label>
       <select id="lijst-entiteiten" size="6"></select>
       <label class="klein" title="Alleen tonen wat op dit verdiep hoort — een gebied dat bij Gelijkvloer, Eerste verdiep of Tweede verdiep hoort. Zonder gebied, of op een ander verdiep, blijft het verborgen; zet de toggle uit om alles te zien.">
         <input type="checkbox" id="toon-ongebruikt" checked> toon enkel ongebruikte
@@ -1111,7 +1120,7 @@ async function laad() {
   // van gisteren tonen terwijl u die bestanden vandaag hebt ververst. De ⟳-knop
   // deed dit al voor statussen.json; een herladen moet hetzelfde opleveren.
   const t = Date.now();
-  const [doc, ent, ico, zon, stat, app] = await Promise.all([
+  const [doc, ent, ico, zon, stat, app, vwp] = await Promise.all([
     fetch(`plattegrond.json?t=${t}`).then(r => r.json()),
     fetch(`entiteiten.json?t=${t}`).then(r => r.json()),
     fetch(`iconen.json?t=${t}`).then(r => r.json()),
@@ -1125,8 +1134,13 @@ async function laad() {
     // welk apparaat al op de kaart staat. Zonder bestand blijft de
     // entitelijst gewoon werken.
     fetch(`apparaten.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+    // voorwerpen.json: de bibliotheek met tekeningen, per kamer gegroepeerd.
+    // Ontbreekt hij, dan blijft de rest van de editor gewoon werken.
+    fetch(`voorwerpen/voorwerpen.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   STAAT.doc = doc;
+  STAAT.voorwerpen = vwp;
+  bouwVoorwerpStijl();
   STAAT.entiteiten = ent.entiteiten;
   STAAT.namen = Object.fromEntries((ent.entiteiten || []).map(e => [e.id, e.naam]));
   // Suggesties voor de entity-velden van de inspectie. Eén lijst, één keer
@@ -2825,6 +2839,8 @@ function isAfbeelding(e) {
    Material Design Icons, dezelfde bron als de rest. */
 const ICONEN_EXTRA = {
   // Het vraagteken voor "dit icoon kennen we niet" — zie de terugval onderaan tekenEchteInhoud.
+  // Het zitbank-symbool voor de voorwerpenlijst (de andere komen uit iconen.json).
+  "mdi:sofa": "M12.5 7C12.5 5.89 13.39 5 14.5 5H18C19.1 5 20 5.9 20 7V9.16C18.84 9.57 18 10.67 18 11.97V14H12.5V7M6 11.96V14H11.5V7C11.5 5.89 10.61 5 9.5 5H6C4.9 5 4 5.9 4 7V9.15C5.16 9.56 6 10.67 6 11.96M20.66 10.03C19.68 10.19 19 11.12 19 12.12V15H5V12C5 10.9 4.11 10 3 10S1 10.9 1 12V17C1 18.1 1.9 19 3 19V21H5V19H19V21H21V19C22.1 19 23 18.1 23 17V12C23 10.79 21.91 9.82 20.66 10.03Z",
   "mdi:help-circle-outline": "M11,18H13V16H11V18M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,6A4,4 0 0,0 8,10H10A2,2 0 0,1 12,8A2,2 0 0,1 14,10C14,12 11,11.75 11,15H13C13,12.75 16,12.5 16,10A4,4 0 0,0 12,6Z",
   "mdi:battery": "M16.67,4H15V2H9V4H7.33A1.33,1.33 0 0,0 6,5.33V20.67C6,21.4 6.6,22 7.33,22H16.67A1.33,1.33 0 0,0 18,20.67V5.33C18,4.6 17.4,4 16.67,4Z",
   "mdi:brightness-5": "M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,15.31L23.31,12L20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31Z",
@@ -3010,6 +3026,7 @@ function tekenGereedschap() {
     ["wijz-entities", "mdi:shape", "◆"],
     ["wijz-persons", "mdi:account", "☺"],
     ["wijz-helpers", "mdi:tools", "🔧"],
+  ["wijz-voorwerpen", "mdi:sofa", "🛋"],
   ];
   for (const [id, icoon, terugval] of knoppen) {
     const knop = el(id);
@@ -4340,9 +4357,23 @@ function stijlVan(doel, bron) {
    versie die u waarschijnlijk bedoelt. */
 function stijlBron(id) {
   if (!id) return null;
-  const hier = elementenMetEntiteit(id).filter(e => e.type !== "conditional");
-  if (hier.length) return { e: hier[0], verdiep: (STAAT.view && STAAT.view.title) || "deze verdieping", eigen: true };
-  const elders = alleElementen().filter(k => k.e.entity === id);
+  // Een entiteit óf een voorwerp: bij een entiteit is het entity-id de
+  // overeenkomst, bij een tekening het bestandspad. Zo krijgt een bed op de 1e
+  // verdieping dezelfde maat als het bed op het gelijkvloers.
+  const past = e => e && e.type !== "conditional" && (e.entity === id || e.image === id);
+  const hier = [];
+  const loop = (lijst, uit) => {
+    for (const e of lijst || []) {
+      if (!e || typeof e !== "object") continue;
+      if (past(e)) uit.push(e);
+      loop(e.elements, uit);
+    }
+  };
+  if (STAAT.kaart) loop(STAAT.kaart.elements, hier);
+  if (hier.length) {
+    return { e: hier[0], verdiep: (STAAT.view && STAAT.view.title) || "deze verdieping", eigen: true };
+  }
+  const elders = alleElementen().filter(k => past(k.e));
   return elders.length ? { e: elders[0].e, verdiep: elders[0].verdiep, eigen: false } : null;
 }
 
@@ -5152,6 +5183,41 @@ function tekenZoeklijst() {
     STAAT.toev !== "persons" && (apparaten ? vloerData.apparaat : vloerData.entiteit);
   let treffers = [];
 
+  // De voorwerpen zijn geen entiteiten: geen apparaat, geen verdiep, geen waarde.
+  // Ze komen uit voorwerpen.json, en ze staan per kamer gegroepeerd.
+  if (STAAT.toev === "voorwerpen") {
+    const stijl = voorwerpStijl();
+    keuze.innerHTML = "";
+    let aantal = 0;
+    for (const groep of (STAAT.voorwerpen && STAAT.voorwerpen.groepen) || []) {
+      const erin = groep.voorwerpen
+        .filter(v => (v.stijlen || []).includes(stijl))
+        .filter(v => !zoek || v.naam.toLowerCase().includes(zoek));
+      if (!erin.length) continue;
+      const blok = document.createElement("optgroup");
+      blok.label = groep.naam;
+      for (const v of erin) {
+        const o = document.createElement("option");
+        o.value = v.id;
+        o.textContent = v.naam;
+        blok.appendChild(o);
+        aantal++;
+      }
+      keuze.appendChild(blok);
+    }
+    if (!aantal) {
+      const o = document.createElement("option");
+      o.value = "";
+      o.textContent = STAAT.voorwerpen
+        ? "niets gevonden" : "de voorwerpenlijst kon niet geladen worden";
+      keuze.appendChild(o);
+    }
+    keuze.selectedIndex = 0;
+    keuze.onchange = () => kiesUitLijst();
+    kiesUitLijst();
+    return;
+  }
+
   if (apparaten) {
     treffers = (STAAT.apparaten || [])
       .filter(a => !(ongebruikt && a.entities.some(x => kaart.has(x))))
@@ -5218,8 +5284,10 @@ el("keuze-entity").onchange = () => lijstTitel(el("keuze-entity"));
 function kiesUitLijst() {
   lijstTitel(el("lijst-entiteiten"));
   const apparaten = STAAT.toev === "apparaten";
+  const voorwerpen = STAAT.toev === "voorwerpen";
   el("keuze-apparaat").classList.toggle("zoniet", !apparaten);
-  el("keuze-entiteit").classList.toggle("zoniet", apparaten);
+  // Bij de voorwerpen is er geen entiteit om te kiezen: dat zijn tekeningen.
+  el("keuze-entiteit").classList.toggle("zoniet", apparaten || voorwerpen);
   if (apparaten) {
     const a = (STAAT.apparaten || []).find(x => x.id === el("lijst-entiteiten").value);
     const vak = el("keuze-entity");
@@ -5237,6 +5305,76 @@ function kiesUitLijst() {
     vak.selectedIndex = 0;
     lijstTitel(vak);
   }
+}
+
+/* ------------------------- voorwerpen -------------------------
+
+   Bedden, kasten, lampen, ventilatoren en meer: losse tekeningen die u op de
+   kaart zet. Ze staan als bestand in `voorwerpen/<stijl>/<naam>.svg` en worden
+   een gewoon `image`-element — dus Home Assistant tekent ze net zo goed als de
+   editor, er is geen nieuw elementtype voor nodig, en u kunt de bestanden zelf
+   bijwerken. `voorwerpen.json` vertelt welke er zijn, per kamer gegroepeerd. */
+
+function voorwerpStijl() {
+  const stijlen = (STAAT.voorwerpen && STAAT.voorwerpen.stijlen) || [];
+  let gekozen = STAAT.voorwerpStijl;
+  if (!gekozen) {
+    try { gekozen = localStorage.getItem("prototype.voorwerpstijl"); } catch (_) { gekozen = null; }
+  }
+  return stijlen.some(s => s.id === gekozen) ? gekozen : (stijlen[0] && stijlen[0].id) || "lijn";
+}
+
+function voorwerpVan(id) {
+  if (!id || !STAAT.voorwerpen) return null;
+  for (const groep of STAAT.voorwerpen.groepen || []) {
+    const v = (groep.voorwerpen || []).find(x => x.id === id);
+    if (v) return v;
+  }
+  return null;
+}
+
+function voorwerpPad(v, stijl) {
+  return `/local/floorplan-editor-prototype/voorwerpen/${stijl}/${v.id}.svg`;
+}
+
+function voegVoorwerpToe(id, positie) {
+  if (!STAAT.kaart) {
+    meld("Deze verdieping heeft nog geen kaart — maak er eerst een met de + naast 'verdiep'.",
+         "fout");
+    return null;
+  }
+  const v = voorwerpVan(id);
+  if (!v) { meld("Kies eerst een voorwerp.", "fout"); return null; }
+  const stijl = voorwerpStijl();
+  if (!(v.stijlen || []).includes(stijl)) {
+    meld(`"${v.naam}" heeft geen versie in die stijl — kies een andere stijl.`, "fout");
+    return null;
+  }
+  // Dezelfde plek-logica als bij een entiteit: het opgegeven punt, anders het
+  // midden. `left`/`top` zijn het midden van het element.
+  const l = positie ? Math.min(100, Math.max(0, Math.round(+positie.l * 100) / 100)) : 50;
+  const t = positie ? Math.min(100, Math.max(0, Math.round(+positie.t * 100) / 100)) : 50;
+  const nieuw = {
+    type: "image",
+    image: voorwerpPad(v, stijl),
+    style: { left: l + "%", top: t + "%", width: v.breedte || "8%" },
+  };
+  // Staat hetzelfde voorwerp al ergens op een kaart, dan nemen we die maat over:
+  // een bed op de 1e verdieping hoort even groot te zijn als op het gelijkvloers.
+  const bron = stijlBron(nieuw.image);
+  if (bron && bron.e !== nieuw) stijlVan(nieuw, bron.e);
+  onthoud();
+  STAAT.kaart.elements.push(nieuw);
+  bouwStaats();
+  tekenAlles();
+  tekenZoeklijst();
+  selecteer(nieuw);
+  meld(
+    `${v.naam} toegevoegd ${positie ? `op ${l}% / ${t}%` : "in het midden"}` +
+    (bron && bron.eigen ? ", in de maat van hetzelfde voorwerp op deze verdieping." : ".") +
+    ` Versleep het, of stel de breedte bij (dubbelklik op het element).`
+  );
+  return nieuw;
 }
 
 function voegToe(id, toelichting, positie) {
@@ -5341,14 +5479,10 @@ function maakLijstSleepbaar(lijst, altijdEntiteit) {
   if (ev.button !== 0) return;
   if (!lijst.options.length) return;
 
-  // Welk item staat er onder de vinger? Geometrisch, want `.value` is nog niet
-  // bijgewerkt op dit punt.
-  const vak = lijst.getBoundingClientRect();
-  const rijHoogte = (lijst.options[0] && lijst.options[0].offsetHeight) ||
-    (vak.height / (lijst.size || lijst.options.length)) || 18;
-  const index = Math.max(0, Math.min(lijst.options.length - 1,
-    Math.floor((ev.clientY - vak.top + lijst.scrollTop) / rijHoogte)));
-  const id = lijst.options[index].value;
+  // Welk item staat er onder de vinger? Via dezelfde hulp als de rechtermuisklik,
+  // die de kopjes van de groepen meetelt — `.value` is hier nog niet bijgewerkt.
+  const optie = optieOnderAanwijzer(lijst, ev);
+  const id = optie && optie.value;
   if (!id) return;
 
   const apparaten = !altijdEntiteit && STAAT.toev === "apparaten";
@@ -5396,7 +5530,9 @@ function maakLijstSleepbaar(lijst, altijdEntiteit) {
       l: (e.clientX - r.left) / r.width * 100,
       t: (e.clientY - r.top) / r.height * 100,
     };
-    if (apparaat) {
+    if (STAAT.toev === "voorwerpen") {
+      voegVoorwerpToe(id, positie);
+    } else if (apparaat) {
       voegToe(apparaat.primair,
         `Vanuit de lijst gesleept; dit is het gezicht van "${apparaat.naam}".`, positie);
     } else {
@@ -5413,17 +5549,30 @@ function maakLijstSleepbaar(lijst, altijdEntiteit) {
 maakLijstSleepbaar(el("lijst-entiteiten"), false);
 maakLijstSleepbaar(el("keuze-entity"), true);
 
-/* Welke optie staat er onder de muis? Geometrisch, want een lijstvak met `size`
-   vertelt de browser niet welke regel er onder de aanwijzer ligt. Nodig voor de
-   rechtermuisklik (en eerder ook voor de sleep). */
+/* Welke optie staat er onder de muis? Nodig voor slepen, de rechtermuisklik en
+   de dubbelklik, want `.value` is op dat moment nog niet bijgewerkt.
+
+   Niet met een vaste rijhoogte: sinds de voorwerpenlijst groepen heeft, zit er
+   tussen twee groepen een kopje van een andere hoogte, en dan wees een vaste
+   rijhoogte het verkeerde voorwerp aan. `offsetTop` van een `<option>` telt die
+   kopjes wél mee — met de eerste rij als nulpunt, zodat het niet uitmaakt waar
+   de lijst op de pagina staat. */
 function optieOnderAanwijzer(lijst, ev) {
   if (!lijst || !lijst.options.length) return null;
   const vak = lijst.getBoundingClientRect();
-  const rijHoogte = (lijst.options[0] && lijst.options[0].offsetHeight) ||
-    (vak.height / (lijst.size || lijst.options.length)) || 18;
-  const i = Math.max(0, Math.min(lijst.options.length - 1,
-    Math.floor((ev.clientY - vak.top + lijst.scrollTop) / rijHoogte)));
-  return lijst.options[i] || null;
+  const nul = lijst.options[0].offsetTop;             // de eerste rij = nulpunt
+  const y = ev.clientY - vak.top + lijst.scrollTop;
+  let dichtst = lijst.options[0];
+  let kleinste = Infinity;
+  for (const o of lijst.options) {
+    const boven = o.offsetTop - nul;
+    const hoog = o.offsetHeight || 18;
+    if (y >= boven && y < boven + hoog) return o;
+    const afstand = y < boven ? boven - y : y - (boven + hoog);
+    if (afstand < kleinste) { kleinste = afstand; dichtst = o; }
+  }
+  // Op een groepskopje of naast de lijst: dan de dichtstbijzijnde rij.
+  return dichtst;
 }
 
 /* Rechtermuisklik op een regel in een keuzelijst: dezelfde voorwaardeklussen, en
@@ -5434,6 +5583,16 @@ function lijstContextMenu(lijst, ev) {
   if (!optie || !optie.value) return;
   ev.preventDefault();
   const id = optie.value;
+  // Een voorwerp is geen entiteit: één regel, en meteen in de gekozen stijl.
+  if (lijst === el("lijst-entiteiten") && STAAT.toev === "voorwerpen") {
+    const v = voorwerpVan(id);
+    contextMenu(ev, v ? v.naam : id, [{
+      tekst: "Toevoegen aan de kaart",
+      uitleg: "in de gekozen stijl, met de maat van hetzelfde voorwerp elders",
+      doe: () => voegVoorwerpToe(id),
+    }]);
+    return;
+  }
   const apparaat = (lijst === el("lijst-entiteiten") && STAAT.toev === "apparaten")
     ? (STAAT.apparaten || []).find(x => x.id === id)
     : null;
@@ -5542,16 +5701,43 @@ const MODI = [
   ["wijz-entities", "entities"],
   ["wijz-persons", "persons"],
   ["wijz-helpers", "helpers"],
+  ["wijz-voorwerpen", "voorwerpen"],
 ];
 function toevModus(manus) {
   STAAT.toev = manus;
   for (const [id, m] of MODI) el(id).classList.toggle("aan", m === manus);
+  // De stijlkeuze hoort alleen bij de voorwerpen.
+  el("voorwerp-stijl-vak").classList.toggle("verborgen", manus !== "voorwerpen");
   tekenZoeklijst();
 }
 for (const [id, m] of MODI) el(id).onclick = () => toevModus(m);
 
+/* De stijlkeuze voor de voorwerpen, gevuld uit voorwerpen.json. */
+function bouwVoorwerpStijl() {
+  const sel = el("voorwerp-stijl");
+  if (!sel) return;
+  sel.innerHTML = "";
+  for (const s of (STAAT.voorwerpen && STAAT.voorwerpen.stijlen) || []) {
+    const o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = s.naam;
+    sel.appendChild(o);
+  }
+  sel.value = voorwerpStijl();
+}
+el("voorwerp-stijl").onchange = ev => {
+  STAAT.voorwerpStijl = ev.target.value;
+  try { localStorage.setItem("prototype.voorwerpstijl", STAAT.voorwerpStijl); } catch (_) { /* geen opslag */ }
+  tekenZoeklijst();
+  meld(`Voorwerpen worden nu getekend als "${ev.target.options[ev.target.selectedIndex].textContent}".`);
+};
+
 el("knop-toevoegen").onclick = voegApparaatToe;
-el("knop-toevoegen-los").onclick = () => voegToe(el("lijst-entiteiten").value);
+el("knop-toevoegen-los").onclick = () => {
+  const id = el("lijst-entiteiten").value;
+  if (STAAT.toev === "voorwerpen") voegVoorwerpToe(id);
+  else voegToe(id);
+};
 el("knop-toevoegen-entity").onclick = () => voegToe(el("keuze-entity").value);
 /* De zone-laag: aan of uit, hoe dik de kadeer, welke kleur. */
 el("zone-dikte").oninput = ev => { STAAT.zoneLaag.dikte = +ev.target.value; tekenZoneLagen(); };

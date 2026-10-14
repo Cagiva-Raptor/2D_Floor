@@ -15,6 +15,17 @@
 !www/floorplan-editor-prototype/logo_2dfloorplan.png
 !www/floorplan-editor-prototype/logo_2dfloorplan.jpeg
 
+# --- de voorwerpen (bedden, kasten, lampen, …) ---
+!www/floorplan-editor-prototype/voorwerpen/
+!www/floorplan-editor-prototype/voorwerpen/*.json
+!www/floorplan-editor-prototype/voorwerpen/*.md
+!www/floorplan-editor-prototype/voorwerpen/lijn/
+!www/floorplan-editor-prototype/voorwerpen/lijn/*.svg
+!www/floorplan-editor-prototype/voorwerpen/effen/
+!www/floorplan-editor-prototype/voorwerpen/effen/*.svg
+!www/floorplan-editor-prototype/voorwerpen/mdi/
+!www/floorplan-editor-prototype/voorwerpen/mdi/*.svg
+
 # --- de integratie ---
 !custom_components/
 !custom_components/floorplan_layout/

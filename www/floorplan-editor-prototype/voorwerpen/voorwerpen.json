@@ -1,0 +1,278 @@
+{
+  "stijlen": [
+    {
+      "id": "lijn",
+      "naam": "Lijnwerk (bovenaanzicht)"
+    },
+    {
+      "id": "effen",
+      "naam": "Effen silhouet"
+    },
+    {
+      "id": "mdi",
+      "naam": "mdi-symbool"
+    }
+  ],
+  "groepen": [
+    {
+      "naam": "Slaapkamer",
+      "voorwerpen": [
+        {
+          "id": "bed-2p",
+          "naam": "bed (tweepersoons)",
+          "breedte": "14%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "bed-1p",
+          "naam": "bed (eenpersoons)",
+          "breedte": "8%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "nachtkastje",
+          "naam": "nachtkastje",
+          "breedte": "4%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "kleerkast",
+          "naam": "kleerkast",
+          "breedte": "11%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
+      "naam": "Woonkamer",
+      "voorwerpen": [
+        {
+          "id": "zetel",
+          "naam": "zetel",
+          "breedte": "13%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "salontafel",
+          "naam": "salontafel",
+          "breedte": "9%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "tv-meubel",
+          "naam": "tv-meubel",
+          "breedte": "12%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "plant",
+          "naam": "plant",
+          "breedte": "4%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "vloerlamp",
+          "naam": "vloerlamp",
+          "breedte": "4%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
+      "naam": "Keuken",
+      "voorwerpen": [
+        {
+          "id": "aanrecht",
+          "naam": "aanrecht",
+          "breedte": "13%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "kookplaat",
+          "naam": "kookplaat",
+          "breedte": "7%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "koelkast",
+          "naam": "koelkast",
+          "breedte": "6%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "dampkap",
+          "naam": "dampkap",
+          "breedte": "10%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
+      "naam": "Badkamer",
+      "voorwerpen": [
+        {
+          "id": "bad",
+          "naam": "bad",
+          "breedte": "12%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "douche",
+          "naam": "douche",
+          "breedte": "7%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "wastafel",
+          "naam": "wastafel",
+          "breedte": "5%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "wc",
+          "naam": "wc",
+          "breedte": "5%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
+      "naam": "Techniek",
+      "voorwerpen": [
+        {
+          "id": "wasmachine",
+          "naam": "wasmachine",
+          "breedte": "6%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "droogkast",
+          "naam": "droogkast",
+          "breedte": "6%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "ventilator",
+          "naam": "ventilator",
+          "breedte": "5%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
+      "naam": "Bouw",
+      "voorwerpen": [
+        {
+          "id": "deur",
+          "naam": "deur",
+          "breedte": "6%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "trap",
+          "naam": "trap",
+          "breedte": "8%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "raam",
+          "naam": "raam",
+          "breedte": "9%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    }
+  ]
+}
