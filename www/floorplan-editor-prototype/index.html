@@ -3419,6 +3419,13 @@ function tekenEchteInhoud(e, doos) {
     const img = document.createElement("img");
     img.src = bron;
     img.alt = "";
+    // Precies zoals de kaart: `hui-image` zet `width: 100%`, `height: 100%` en
+    // `object-fit: cover`. Staat er dus een hoogte in de stijl, dan vult het beeld
+    // die doos en wordt het bijgesneden — het rekt niet mee. Zonder hoogte houdt
+    // de afbeelding haar eigen verhouding (`height: auto`), net als op de kaart.
+    img.style.width = "100%";
+    img.style.height = e.style && e.style.height != null ? "100%" : "auto";
+    img.style.objectFit = e.style && e.style.height != null ? "cover" : "";
     img.onerror = () => {
       const v = vakje(e, false);
       v.textContent = "afbeelding onbekend";
