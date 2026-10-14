@@ -5954,30 +5954,28 @@ function maakLijstSleepbaar(lijst, altijdEntiteit) {
 maakLijstSleepbaar(el("lijst-entiteiten"), false);
 maakLijstSleepbaar(el("keuze-entity"), true);
 
-/* Welke optie staat er onder de muis? Nodig voor slepen, de rechtermuisklik en
-   de dubbelklik, want `.value` is op dat moment nog niet bijgewerkt.
+/* Welke optie staat er onder de muis? We vragen het de browser zelf: elke optie
+   heeft een eigen opmaakvak (`getBoundingClientRect`), en dat klopt ook met
+   groepskopjes en met een lijst die geschoven is.
 
-   Niet met een vaste rijhoogte: sinds de voorwerpenlijst groepen heeft, zit er
-   tussen twee groepen een kopje van een andere hoogte, en dan wees een vaste
-   rijhoogte het verkeerde voorwerp aan. `offsetTop` van een `<option>` telt die
-   kopjes wél mee — met de eerste rij als nulpunt, zodat het niet uitmaakt waar
-   de lijst op de pagina staat. */
+   Eerder rekenden we dit uit — eerst met een vaste rijhoogte, daarna met
+   `offsetTop`. Allebei wezen ze een rij te laag aan zodra er groepen in de lijst
+   staan: de kopjes tellen niet mee in die getallen, en de eerste rij begint pas
+   onder de rand en de opvulling van het vak. Gemeten: rij 0 staat op 24 pixels van
+   de bovenkant van het vak, terwijl het verschil in `offsetTop` 0 zei. */
 function optieOnderAanwijzer(lijst, ev) {
   if (!lijst || !lijst.options.length) return null;
-  const vak = lijst.getBoundingClientRect();
-  const nul = lijst.options[0].offsetTop;             // de eerste rij = nulpunt
-  const y = ev.clientY - vak.top + lijst.scrollTop;
-  let dichtst = lijst.options[0];
+  let dichtst = null;
   let kleinste = Infinity;
   for (const o of lijst.options) {
-    const boven = o.offsetTop - nul;
-    const hoog = o.offsetHeight || 18;
-    if (y >= boven && y < boven + hoog) return o;
-    const afstand = y < boven ? boven - y : y - (boven + hoog);
+    const r = o.getBoundingClientRect();
+    if (!r.height) continue;                  // niet getekend: geen oordeel
+    if (ev.clientY >= r.top && ev.clientY < r.bottom) return o;
+    const afstand = ev.clientY < r.top ? r.top - ev.clientY : ev.clientY - r.bottom;
     if (afstand < kleinste) { kleinste = afstand; dichtst = o; }
   }
-  // Op een groepskopje of naast de lijst: dan de dichtstbijzijnde rij.
-  return dichtst;
+  // Naast de lijst of op een groepskopje: dan de dichtstbijzijnde rij.
+  return dichtst || lijst.options[0];
 }
 
 /* Rechtermuisklik op een regel in een keuzelijst: dezelfde voorwaardeklussen, en
