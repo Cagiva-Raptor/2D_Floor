@@ -4534,10 +4534,6 @@ async function kiesStijlBron(doel) {
    van 15°). */
 
 const GREEP_RICHTINGEN = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
-const GREEP_CURSOR = {
-  nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize", e: "ew-resize",
-  se: "nwse-resize", s: "ns-resize", sw: "nesw-resize", w: "ew-resize",
-};
 
 function greepModus(e, modus) {
   if (!e) return;
@@ -4560,11 +4556,21 @@ function grepenTeken(doos, e, modus) {
   // schaal: anders werden ze strepen in plaats van handvatten.
   const s = schaalVan(e.style && e.style.transform);
   const tegenschaal = (s.x !== 1 || s.y !== 1) ? `scale(${1 / s.x}, ${1 / s.y})` : "";
+  // En de cursor draait mee met het element: bij een gedraaid voorwerp wijst de
+  // zijkant een andere kant op, dus een pijltje dat naar links en rechts wijst zou
+  // liegen. Elke 45 graden schuift de cursor een stap in de rij.
+  const RING = ["nwse-resize", "ns-resize", "nesw-resize", "ew-resize",
+                "nwse-resize", "ns-resize", "nesw-resize", "ew-resize"];
+  const stappen = Math.round(rotatieVan(e.style && e.style.transform) / 45);
   const maak = (klasse, stijl, uitleg, richting) => {
     const g = document.createElement("div");
     g.className = "greep" + (klasse ? " " + klasse : "");
     for (const [k, v] of Object.entries(stijl)) g.style[k] = v;
     if (tegenschaal) g.style.transform = tegenschaal;
+    if (richting) {
+      const i = (GREEP_RICHTINGEN.indexOf(richting) + stappen + 800) % 8;
+      g.style.cursor = RING[i];
+    }
     g.title = uitleg;
     if (richting) g.dataset.richting = richting;
     g.addEventListener("pointerdown", ev => {
@@ -4586,11 +4592,13 @@ function grepenTeken(doos, e, modus) {
   for (const r of GREEP_RICHTINGEN) {
     const links = r.includes("w") ? "0%" : r.includes("e") ? "100%" : "50%";
     const boven = r.includes("n") ? "0%" : r.includes("s") ? "100%" : "50%";
-    const hoek = r.length === 2;                     // nw, ne, se, sw
-    const wat = hoek ? "breedte én hoogte"
+    const isHoek = r.length === 2;                     // nw, ne, se, sw
+    const wat = isHoek ? "breedte én hoogte"
       : (r === "e" || r === "w") ? "alleen de breedte" : "alleen de hoogte";
-    maak(hoek ? "hoek" : "", { left: links, top: boven, cursor: GREEP_CURSOR[r] },
-        `schaal ${r} — ${wat} (met shift blijft de verhouding)`, r);
+    const gedraaid = ((stappen * 45) % 360 + 360) % 360;
+    maak(isHoek ? "hoek" : "", { left: links, top: boven },
+        `schaal ${r} — ${wat} (met shift blijft de verhouding)` +
+        (gedraaid ? ` · het element staat ${gedraaid}° gedraaid, dus sleep langs zijn rand` : ""), r);
   }
 }
 
@@ -4655,15 +4663,27 @@ function schaalSleep(doos, e, richting) {
      dezelfde transform hier hetzelfde uitpakt, blijft de editor gelijk aan het
      dashboard. */
   const beweeg = ev => {
-    const dx = Math.abs(ev.clientX - midden.x) * 2;
-    const dy = Math.abs(ev.clientY - midden.y) * 2;
+    const dxs = ev.clientX - midden.x;
+    const dys = ev.clientY - midden.y;
+    // De aanwijzer teruggerekend naar de richting van het element zelf. Zonder dit
+    // schaalt een gedraaid voorwerp in de verkeerde as: bij 270 graden wijst de
+    // zijkant van het element naar boven, dus dan groeide de hoogte als u naar
+    // rechts trok.
+    const rad = -hoek * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const eigenX = dxs * cos - dys * sin;
+    const eigenY = dxs * sin + dys * cos;
+    const dx = Math.abs(eigenX) * 2;
+    const dy = Math.abs(eigenY) * 2;
     label = label || greepLabel(ev);
     label.style.left = (ev.clientX + 14) + "px";
     label.style.top = (ev.clientY + 10) + "px";
 
     if (viaLettergrootte) {
+      // Tekst rekt niet, dus daar telt de beweging op het scherm: elke richting
+      // schaalt hetzelfde.
       const basisPx = sleeptBreedte ? begin.w : begin.h;
-      const factor = Math.max(0.15, (sleeptBreedte ? dx : dy) / Math.max(1, basisPx));
+      const factor = Math.max(0.15, Math.max(Math.abs(dxs), Math.abs(dys)) * 2 / Math.max(1, basisPx));
       st["font-size"] = (beginFont * factor).toFixed(2) + "vw";
       doos.style.fontSize = cssWaarde(st["font-size"]);
       label.textContent = `lettergrootte ${st["font-size"]}`;
