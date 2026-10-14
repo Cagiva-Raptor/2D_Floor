@@ -985,7 +985,8 @@ const STAAT = {
   helpers: new Set(),   // de entiteiten die géén apparaat hebben
   vloeren: null,        // entiteit/apparaat -> verdiep, uit de registries van HA
   vloerenBelofte: null, // zodat er nooit twee ophalingen tegelijk lopen
-  viewIndex: 0,         // welk tabblad (view) de editor bewerkt
+  viewIndex: -1,        // welk tabblad (view) de editor bewerkt; -1 = nog niets
+                        // gekozen, dan pakt bouwStaats de onthouden verdieping
   bron: "momentopname",  // waar het geladen document vandaan komt — bij het
                          // laden vervangen door `_bron` uit het bestand zelf
   // Welke lijst er links staat. Vier knoppen: apparaten, alle entities,
@@ -2529,6 +2530,25 @@ function bewerkbareKaart(view) {
 /* Welke verdieping staat er open? De gekozen, of bij gebrek daaraan de eerste
    die wél een kaart heeft. Vroeger pakte deze functie de láátste kaart van het
    láátste view — daarmee was er geen weg terug naar een ander tabblad. */
+/* Welke verdieping u open had. Net als de stijlkeuze van de voorwerpen iets van
+   uw scherm en niet van de plattegrond, dus het staat in deze browser en niet op
+   de HA-instance. */
+const OPEN_VERDIEP_SLEUTEL = "prototype.openverdiep";
+
+function onthoudVerdiep() {
+  if (!Number.isInteger(STAAT.viewIndex) || STAAT.viewIndex < 0) return;
+  try { localStorage.setItem(OPEN_VERDIEP_SLEUTEL, String(STAAT.viewIndex)); } catch (_) { /* geen opslag */ }
+}
+
+function eerderVerdiep() {
+  try {
+    const n = parseInt(localStorage.getItem(OPEN_VERDIEP_SLEUTEL), 10);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function bouwStaats() {
   STAAT.tak = new WeakMap();
   STAAT.kaart = null;
@@ -2537,6 +2557,12 @@ function bouwStaats() {
   // in maken. Alleen als de keuze zelf onbruikbaar is vallen we terug op de
   // eerste view die wél een kaart heeft.
   let i = Number.isInteger(STAAT.viewIndex) && views[STAAT.viewIndex] ? STAAT.viewIndex : -1;
+  // Nog niets gekozen (een verse laadbeurt)? Dan terug naar de verdieping die u
+  // open had — ook als daar nog geen kaart in zit, want dat is uw eigen keuze.
+  if (i < 0) {
+    const eerder = eerderVerdiep();
+    if (eerder != null && views[eerder]) i = eerder;
+  }
   if (i < 0) i = views.findIndex(bewerkbareKaart);
   STAAT.viewIndex = i;
   STAAT.view = i >= 0 ? views[i] : null;
@@ -6160,6 +6186,7 @@ el("verdiep").onchange = () => {
   // Wisselen is geen documentbewerking: er is niets vast te leggen. Alleen de
   // tekening, de boom en de inspectie gaan mee.
   STAAT.viewIndex = i;
+  onthoudVerdiep();
   STAAT.geselecteerd = null;
   STAAT.selektie.clear();
   STAAT.zoneBewerkt = null;
@@ -6246,6 +6273,7 @@ async function verdiepToevoegen() {
     doel = { title: titel, type: "panel", icon: "mdi:home-floor-3", cards: [kaart] };
     views.push(doel);
     STAAT.viewIndex = views.length - 1;
+    onthoudVerdiep();
   }
   STAAT.geselecteerd = null;
   STAAT.selektie.clear();
@@ -6287,6 +6315,7 @@ async function verdiepVerwijderen() {
   onthoud();
   views.splice(i, 1);
   STAAT.viewIndex = Math.max(0, Math.min(i, views.length - 1));
+  onthoudVerdiep();
   STAAT.geselecteerd = null;
   STAAT.selektie.clear();
   STAAT.zoneBewerkt = null;
