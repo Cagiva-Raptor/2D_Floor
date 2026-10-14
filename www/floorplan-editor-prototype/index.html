@@ -4568,18 +4568,52 @@ function schaalSleep(doos, e, richting) {
   const midden = elementMidden(e, vak);
   const sleeptBreedte = richting.includes("w") || richting.includes("e");
   const sleeptHoogte = richting.includes("n") || richting.includes("s");
-  const begin = { w: parseFloat(st.width) || 0, h: parseFloat(st.height) || 0 };
-  // De verhouding zoals het er nu staat — ook als er geen `height` is ingesteld.
-  const verhouding = doos.offsetWidth / Math.max(1, doos.offsetHeight);
+  // Wat het element nu meet: de basis voor beide richtingen.
+  const begin = { w: doos.offsetWidth, h: doos.offsetHeight };
+  const verhouding = begin.w / Math.max(1, begin.h);
+  // Een pictogram, badge of label wordt door zijn lettergrootte geschaald en niet
+  // door een breedte; daar doet elke greep hetzelfde, want tekst rekt niet.
+  const viaLettergrootte = !isAfbeelding(e);
+  const beginFont = parseFloat(st["font-size"]) ||
+    (begin.h / Math.max(1, window.innerWidth) * 100);
   onthoud();
   let label = null;
   const pct = (px, totaal) => Math.max(0.4, px / totaal * 100).toFixed(1) + "%";
 
+  /* Schaaft u maar één richting, dan moet de andere maat vastgezet worden op wat
+     het element nu toont. Zonder dat rekt een afbeelding mee met zijn eigen
+     verhouding — en dan lijkt het of u altijd breedte en hoogte samen schaalt. */
+  const bevries = () => {
+    if (viaLettergrootte) return;
+    if (sleeptBreedte && !sleeptHoogte && st.height == null) {
+      st.height = pct(begin.h, vak.height);
+      doos.style.height = st.height;
+    }
+    if (sleeptHoogte && !sleeptBreedte && st.width == null) {
+      st.width = pct(begin.w, vak.width);
+      doos.style.width = st.width;
+    }
+  };
+
   const beweeg = ev => {
     const dx = Math.abs(ev.clientX - midden.x) * 2;
     const dy = Math.abs(ev.clientY - midden.y) * 2;
-    let breedtePx = sleeptBreedte ? dx : begin.w / 100 * vak.width;
-    let hoogtePx = sleeptHoogte ? dy : (begin.h ? begin.h / 100 * vak.height : 0);
+    label = label || greepLabel(ev);
+    label.style.left = (ev.clientX + 14) + "px";
+    label.style.top = (ev.clientY + 10) + "px";
+
+    if (viaLettergrootte) {
+      const basisPx = sleeptBreedte ? begin.w : begin.h;
+      const factor = Math.max(0.05, (sleeptBreedte ? dx : dy) / Math.max(1, basisPx));
+      st["font-size"] = (beginFont * factor).toFixed(2) + "vw";
+      doos.style.fontSize = cssWaarde(st["font-size"]);
+      label.textContent = `lettergrootte ${st["font-size"]}`;
+      return;
+    }
+
+    bevries();
+    let breedtePx = sleeptBreedte ? dx : begin.w;
+    let hoogtePx = sleeptHoogte ? dy : begin.h;
     if (ev.shiftKey && sleeptBreedte && sleeptHoogte) hoogtePx = breedtePx / verhouding;
     if (sleeptBreedte) {
       st.width = pct(breedtePx, vak.width);
@@ -4589,9 +4623,6 @@ function schaalSleep(doos, e, richting) {
       st.height = pct(hoogtePx, vak.height);
       doos.style.height = st.height;
     }
-    label = label || greepLabel(ev);
-    label.style.left = (ev.clientX + 14) + "px";
-    label.style.top = (ev.clientY + 10) + "px";
     label.textContent = `breedte ${st.width || "eigen"}` + (st.height ? ` · hoogte ${st.height}` : "");
   };
 
@@ -4602,8 +4633,10 @@ function schaalSleep(doos, e, richting) {
     greepLabelWeg();
     tekenAlles();
     selecteer(e);
-    meld(`Schaal van "${naamVan(e)}": breedte ${st.width || "eigen"}` +
-         (st.height ? `, hoogte ${st.height}` : "") + ". ↶ draait het terug.", "serieus");
+    meld(viaLettergrootte
+      ? `"${naamVan(e)}" staat nu op lettergrootte ${st["font-size"]}. ↶ draait het terug.`
+      : `Schaal van "${naamVan(e)}": breedte ${st.width || "eigen"}` +
+        (st.height ? `, hoogte ${st.height}` : "") + ". ↶ draait het terug.", "serieus");
   };
   window.addEventListener("pointermove", beweeg);
   window.addEventListener("pointerup", stop);
