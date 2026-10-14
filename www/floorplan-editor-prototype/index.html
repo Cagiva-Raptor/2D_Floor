@@ -4556,10 +4556,15 @@ function grepenWeg() {
 }
 
 function grepenTeken(doos, e, modus) {
+  // Staat er een schaal op het element, dan krijgen de grepen de omgekeerde
+  // schaal: anders werden ze strepen in plaats van handvatten.
+  const s = schaalVan(e.style && e.style.transform);
+  const tegenschaal = (s.x !== 1 || s.y !== 1) ? `scale(${1 / s.x}, ${1 / s.y})` : "";
   const maak = (klasse, stijl, uitleg, richting) => {
     const g = document.createElement("div");
     g.className = "greep" + (klasse ? " " + klasse : "");
     for (const [k, v] of Object.entries(stijl)) g.style[k] = v;
+    if (tegenschaal) g.style.transform = tegenschaal;
     g.title = uitleg;
     if (richting) g.dataset.richting = richting;
     g.addEventListener("pointerdown", ev => {
@@ -4624,33 +4629,26 @@ function schaalSleep(doos, e, richting) {
   const midden = elementMidden(e, vak);
   const sleeptBreedte = richting.includes("w") || richting.includes("e");
   const sleeptHoogte = richting.includes("n") || richting.includes("s");
-  // Wat het element nu meet: de basis voor beide richtingen.
+  // De onvervormde maat van het element. `offsetWidth`/`offsetHeight` zijn de
+  // opmaakmaten en niet wat een transform ervan maakt, dus dit is de basis.
   const begin = { w: doos.offsetWidth, h: doos.offsetHeight };
-  const verhouding = begin.w / Math.max(1, begin.h);
+  const begintSchaal = schaalVan(st.transform);
+  const hoek = rotatieVan(st.transform);
   // Een pictogram, badge of label wordt door zijn lettergrootte geschaald en niet
-  // door een breedte; daar doet elke greep hetzelfde, want tekst rekt niet.
+  // door een breedte of hoogte; tekst rekt nu eenmaal niet.
   const viaLettergrootte = !isAfbeelding(e);
   const beginFont = parseFloat(st["font-size"]) ||
     (begin.h / Math.max(1, window.innerWidth) * 100);
   onthoud();
   let label = null;
-  const pct = (px, totaal) => Math.max(0.4, px / totaal * 100).toFixed(1) + "%";
+  let laatste = { x: begintSchaal.x, y: begintSchaal.y };
+  const r2 = n => Math.round(n * 100) / 100;
 
-  /* Schaaft u maar één richting, dan moet de andere maat vastgezet worden op wat
-     het element nu toont. Zonder dat rekt een afbeelding mee met zijn eigen
-     verhouding — en dan lijkt het of u altijd breedte en hoogte samen schaalt. */
-  const bevries = () => {
-    if (viaLettergrootte) return;
-    if (sleeptBreedte && !sleeptHoogte && st.height == null) {
-      st.height = pct(begin.h, vak.height);
-      doos.style.height = st.height;
-    }
-    if (sleeptHoogte && !sleeptBreedte && st.width == null) {
-      st.width = pct(begin.w, vak.width);
-      doos.style.width = st.width;
-    }
-  };
-
+  /* Waarom een schaal en geen breedte en hoogte: geeft u een afbeelding een eigen
+     hoogte, dan zet Home Assistant haar op `object-fit: cover` — die snijdt bij.
+     Een `transform` voert de kaart wél uit, dus rekken kan alleen zo. En omdat
+     dezelfde transform hier hetzelfde uitpakt, blijft de editor gelijk aan het
+     dashboard. */
   const beweeg = ev => {
     const dx = Math.abs(ev.clientX - midden.x) * 2;
     const dy = Math.abs(ev.clientY - midden.y) * 2;
@@ -4660,33 +4658,32 @@ function schaalSleep(doos, e, richting) {
 
     if (viaLettergrootte) {
       const basisPx = sleeptBreedte ? begin.w : begin.h;
-      const factor = Math.max(0.05, (sleeptBreedte ? dx : dy) / Math.max(1, basisPx));
+      const factor = Math.max(0.15, (sleeptBreedte ? dx : dy) / Math.max(1, basisPx));
       st["font-size"] = (beginFont * factor).toFixed(2) + "vw";
       doos.style.fontSize = cssWaarde(st["font-size"]);
       label.textContent = `lettergrootte ${st["font-size"]}`;
       return;
     }
 
-    bevries();
-    let breedtePx = sleeptBreedte ? dx : begin.w;
-    let hoogtePx = sleeptHoogte ? dy : begin.h;
-    if (ev.shiftKey && sleeptBreedte && sleeptHoogte) hoogtePx = breedtePx / verhouding;
-    if (sleeptBreedte) {
-      st.width = pct(breedtePx, vak.width);
-      doos.style.width = st.width;
+    // De afstand tot het midden is de maat die u ziet; `begin.w`/`begin.h` zijn de
+    // onvervormde maten. Het quotiënt is dus meteen de schaal — de bestaande schaal
+    // er nog eens mee vermenigvuldigen zou hem dubbel tellen en laten springen.
+    let sx = sleeptBreedte ? dx / Math.max(1, begin.w) : begintSchaal.x;
+    let sy = sleeptHoogte ? dy / Math.max(1, begin.h) : begintSchaal.y;
+    if (ev.shiftKey && sleeptBreedte && sleeptHoogte) sy = sx;
+    sx = Math.max(0.05, sx);
+    sy = Math.max(0.05, sy);
+    laatste = { x: sx, y: sy };
+    st.transform = metTransform(st.transform, hoek, sx, sy);
+    doos.style.transform = cssWaarde(st.transform);
+    // De grepen mogen niet meerekken, anders wordt een handvat een streep en
+    // staat het niet meer op de hoek. Ze krijgen de omgekeerde schaal.
+    for (const g of doos.querySelectorAll(".greep")) {
+      g.style.transform = `scale(${r2(1 / sx)}, ${r2(1 / sy)})`;
     }
-    if (sleeptHoogte) {
-      st.height = pct(hoogtePx, vak.height);
-      doos.style.height = st.height;
-    }
-    // Zeggen wat er verandert én wat blijft: dan is meteen te zien dat een
-    // randgreep maar één richting doet.
-    if (sleeptBreedte) {
-      label.textContent = `breedte ${st.width || "eigen"}` +
-        (st.height ? (sleeptHoogte ? ` · hoogte ${st.height}` : ` · hoogte blijft ${st.height}`) : "");
-    } else {
-      label.textContent = `hoogte ${st.height || "eigen"}` + (st.width ? ` · breedte blijft ${st.width}` : "");
-    }
+    label.textContent = `schaal ${r2(sx)} × ${r2(sy)}` +
+      (sleeptBreedte && !sleeptHoogte ? " · hoogte onveranderd"
+        : sleeptHoogte && !sleeptBreedte ? " · breedte onveranderd" : "");
   };
 
   const stop = () => {
@@ -4698,8 +4695,10 @@ function schaalSleep(doos, e, richting) {
     selecteer(e);
     meld(viaLettergrootte
       ? `"${naamVan(e)}" staat nu op lettergrootte ${st["font-size"]}. ↶ draait het terug.`
-      : `Schaal van "${naamVan(e)}": breedte ${st.width || "eigen"}` +
-        (st.height ? `, hoogte ${st.height}` : "") + ". ↶ draait het terug.", "serieus");
+      : `"${naamVan(e)}" geschaald: ${r2(laatste.x)} × ${r2(laatste.y)}` +
+        (sleeptBreedte && !sleeptHoogte ? " (alleen de breedte)"
+          : sleeptHoogte && !sleeptBreedte ? " (alleen de hoogte)" : "") +
+        ". ↶ draait het terug.", "serieus");
   };
   window.addEventListener("pointermove", beweeg);
   window.addEventListener("pointerup", stop);
@@ -4755,15 +4754,38 @@ function zonderRotatie(transform) {
   return String(transform || "").replace(/rotate\(\s*-?[\d.]+deg\s*\)\s*/g, "").trim();
 }
 
-/* Een transform met deze hoek erin. Zonder eigen transform centreert Home
-   Assistant een element; zodra er wél een transform staat doet hij dat niet meer.
-   Daarom laten we die situatie zoals hij was: was er niets, dan zetten we het
-   centreren er nu expliciet bij — anders verschoof het element bij het draaien. */
-function metRotatie(transform, graden) {
+/* De schaal uit een `transform`: `scale(s)` of `scale(sx, sy)`. */
+function schaalVan(transform) {
+  const m = /scale\(\s*([-\d.]+)\s*(?:,\s*([-\d.]+)\s*)?\)/.exec(String(transform || ""));
+  if (!m) return { x: 1, y: 1 };
+  const x = parseFloat(m[1]);
+  const y = m[2] !== undefined ? parseFloat(m[2]) : x;
+  return { x: isFinite(x) && x !== 0 ? x : 1, y: isFinite(y) && y !== 0 ? y : 1 };
+}
+
+/* Een transform met deze hoek en schaal erin; de rest blijft staan. Zonder eigen
+   transform zetten we het centreren erbij: Home Assistant centreert een element
+   alleen zolang er geen transform staat — anders verschoof het element. */
+function metTransform(transform, graden, sx, sy) {
   const had = String(transform || "").trim();
-  const zonder = zonderRotatie(had);
-  const basis = !had ? "translate(-50%, -50%)" : zonder;
-  return (basis ? basis + " " : "") + `rotate(${Math.round(graden)}deg)`;
+  const zonder = had.replace(/rotate\(\s*-?[\d.]+deg\s*\)\s*/g, "")
+                    .replace(/scale\(\s*[-\d.]+(?:\s*,\s*[-\d.]+)?\s*\)\s*/g, "")
+                    .trim();
+  const delen = [];
+  if (!had) delen.push("translate(-50%, -50%)");
+  else if (zonder) delen.push(zonder);
+  if (graden !== undefined) delen.push(`rotate(${Math.round(graden)}deg)`);
+  if (sx !== undefined && sy !== undefined) {
+    const r = n => Math.round(n * 100) / 100;
+    if (r(sx) !== 1 || r(sy) !== 1) delen.push(`scale(${r(sx)}, ${r(sy)})`);
+  }
+  return delen.join(" ");
+}
+
+/* Een transform met deze hoek erin, en de schaal die er al in zat. */
+function metRotatie(transform, graden) {
+  const s = schaalVan(transform);
+  return metTransform(transform, graden, s.x, s.y);
 }
 
 /* De regels van het rechtermuisklik-menu op een element: de voorwaarde, en het
