@@ -2056,7 +2056,12 @@ function tekenZoneLagen() {
   houder.appendChild(svg);
 
   let geteld = 0;
-  const tekenLijst = zonesVanVerdiep().slice();
+  // Is van deze verdieping bekend welke zones erbij horen? Dat kan pas als de
+  // gebieden van Home Assistant binnen zijn. Zolang dat niet zo is, tekenen we
+  // alleen wat er écht voor dít verdiep is opgeslagen. Anders verschijnt de
+  // woonkamer van het gelijkvloers hier als leeg standaardkader — precies in dat
+  // korte ogenblik na een verversing, voordat de gebieden binnen zijn.
+  const tekenLijst = (zoneVerdiepBekend() ? zonesVanVerdiep() : []).slice();
   const alInLijst = new Set(tekenLijst.map(z => z.id));
   // Ook de vormen die al voor dit verdiep zijn opgeslagen, ook als hun gebied op
   // een ander verdiep hangt: wat hier getekend ligt hoort hier zichtbaar te
@@ -5309,6 +5314,15 @@ function verdiepInstelling(view) {
   return (view && verdiepInstellingen()[verdiepSleutel(view)]) || {};
 }
 
+/* Weten we welke zones bij deze verdieping horen? Dat kan pas als de gebieden van
+   Home Assistant binnen zijn. Zonder die wetenschap is elke zone een gok en
+   tekenen we alleen wat er voor dit verdiep is opgeslagen. */
+function zoneVerdiepBekend() {
+  const gekoppeld = verdiepInstelling(STAAT.view).floor || "";
+  const vloer = STAAT.vloeren;
+  return !!(gekoppeld && vloer && vloer.gebied);
+}
+
 /* Welke bestandsnaam deze verdieping toont voor een variant: eerst wat er in de
    verdieping-instellingen staat, anders wat de kaart noemt, anders home.png. */
 function verdiepAfbeelding(variant, kaart) {
@@ -5406,6 +5420,15 @@ async function verdiepKaartOphalen() {
   }
 
   STAAT.vloeren = kaart;
+  // Nu pas is echt bekend welke zones bij dit verdiep horen: keuzelijst, lijst en
+  // tekening opnieuw. Zonder dit bleef het beeld van vóór de gebieden staan — met
+  // de zonekaders van een andere verdieping er nog in. Alleen als het écht gelukt
+  // is, anders zou een mislukte poging zichzelf blijven herhalen.
+  if (kaart.gebied) {
+    bouwZonekiezer();
+    tekenZoeklijst();
+  }
+  tekenAlles();
   const nEnt = kaart.entiteit ? Object.values(kaart.entiteit).filter(Boolean).length : 0;
   const nApp = kaart.apparaat ? Object.values(kaart.apparaat).filter(Boolean).length : 0;
   const tekst = fouten.length
