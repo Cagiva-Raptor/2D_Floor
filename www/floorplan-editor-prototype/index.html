@@ -4639,6 +4639,11 @@ function schaalSleep(doos, e, richting) {
   const viaLettergrootte = !isAfbeelding(e);
   const beginFont = parseFloat(st["font-size"]) ||
     (begin.h / Math.max(1, window.innerWidth) * 100);
+  // Een vaste hoogte uit een eerdere bewerking laten staan zou het beeld op de
+  // kaart bijsnijden in plaats van rekken. Rekken gaat met de schaal, dus die
+  // hoogte gaat eruit — dat is precies het verschil tussen snijden en rekken.
+  const hoogteWeg = isAfbeelding(e) && st.height != null;
+  if (hoogteWeg) delete st.height;
   onthoud();
   let label = null;
   let laatste = { x: begintSchaal.x, y: begintSchaal.y };
@@ -4698,6 +4703,7 @@ function schaalSleep(doos, e, richting) {
       : `"${naamVan(e)}" geschaald: ${r2(laatste.x)} × ${r2(laatste.y)}` +
         (sleeptBreedte && !sleeptHoogte ? " (alleen de breedte)"
           : sleeptHoogte && !sleeptBreedte ? " (alleen de hoogte)" : "") +
+        (hoogteWeg ? " · de vaste hoogte is weggehaald, want die liet de kaart bijsnijden" : "") +
         ". ↶ draait het terug.", "serieus");
   };
   window.addEventListener("pointermove", beweeg);
@@ -5047,7 +5053,8 @@ function tekenInspector() {
         <input id="i-boven" value="${st.top ?? "50%"}" ${ruis ? "disabled" : ""}></label>
       <label class="veld"><span>breedte</span><input id="i-breedte" value="${st.width ?? ""}"></label>
       <label class="veld"><span>hoogte</span>
-        <input id="i-hoogte" placeholder="leeg = eigen verhouding" value="${st.height ?? ""}"></label>
+        <input id="i-hoogte" placeholder="leeg = eigen verhouding" value="${st.height ?? ""}"
+               title="een vaste hoogte laat Home Assistant het beeld bijsnijden; om te rekken gebruikt u Schaal (rechtermuisklik op het element)"></label>
       <label class="veld"><span>rotatie (°)</span>
         <input id="i-rotatie" placeholder="0" value="${st.transform ? rotatieVan(st.transform) : ""}"></label>
       <label class="veld"><span>z-index</span><input id="i-z" value="${st["z-index"] ?? ""}"></label>
@@ -5749,6 +5756,12 @@ function voegVoorwerpToe(id, positie) {
   const nieuw = {
     type: "image",
     image: voorwerpPad(v, stijl),
+    // Geen actie: een voorwerp is decor. En het scheelt iets belangrijks — zonder
+    // `tap_action` zet Home Assistant de kaart op "klikbaar", en een klikbaar
+    // element krijgt `overflow: hidden`, waardoor een uitgerekt voorwerp wordt
+    // afgekapt. Uw eigen afbeeldingen hebben daarom ook `action: none`.
+    tap_action: { action: "none" },
+    hold_action: { action: "none" },
     style: { left: l + "%", top: t + "%", width: v.breedte || "8%" },
   };
   // Staat hetzelfde voorwerp al ergens op een kaart, dan nemen we die maat over:
