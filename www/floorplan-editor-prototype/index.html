@@ -594,6 +594,28 @@
   }
   #inspector-paneel .tabpaneel.verborgen { display: none; }
   #inspector-paneel pre { max-height: 320px; }
+  /* De grepen om te schalen en te draaien. Ze zitten ín het element, dus ze
+     bewegen mee als u het versleept; `position: absolute` met een halve marge
+     zet ze precies op de hoek of het midden van de rand. */
+  .greep {
+    position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+    background: var(--accent); border: 1px solid #fff; border-radius: 2px;
+    box-shadow: 0 0 4px #000a; z-index: 9800; touch-action: none;
+  }
+  .greep.draai {
+    border-radius: 50%; background: var(--waarschuwing); cursor: grab;
+    width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  }
+  .greep.draai::after {
+    content: ""; position: absolute; left: 5px; top: 12px; width: 2px; height: 16px;
+    background: var(--waarschuwing);
+  }
+  #greep-label {
+    position: fixed; z-index: 9900; pointer-events: none;
+    background: #000c; color: var(--tekst); border: 1px solid var(--lijn);
+    border-radius: 4px; padding: 2px 7px; font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
   .vier { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   pre {
     margin: 0; padding: 8px; background: #11141a; border: 1px solid var(--lijn);
@@ -923,6 +945,7 @@ const STAAT = {
   kaart: null,
   variant: "day",
   geselecteerd: null,    // het element dat rechts in de inspectie staat
+  grepen: null,          // { e, modus } zolang u schaalt of draait
   selektie: new Set(),   // alles wat geselecteerd is; mag meer dan één zijn
   greep: "pan",          // "pan" = slepen verplaatst het beeld, "select" = de elementen
   ongedaan: [],
@@ -3207,6 +3230,8 @@ function maakDoos(e) {
 
   doos.__element = e;
   maakVersleepbaar(doos, e);
+  // In de schaal- of draaistand zitten de grepen in het element zelf.
+  if (STAAT.grepen && STAAT.grepen.e === e) grepenTeken(doos, e, STAAT.grepen.modus);
   doos.title = `${naamVan(e)}\n${e.type}${e.entity ? " · " + e.entity : ""} · sleutel ${sleutelVan(e)}`;
   // Rechtermuisklik op het element zelf: hetzelfde menu als in de boom. Eerst
   // het menu, dan pas selecteren — selecteren tekent opnieuw en dat mag het
@@ -3946,6 +3971,8 @@ function selecteer(e, toevoegen) {
     STAAT.selektie.add(e);
     STAAT.geselecteerd = e;
   }
+  // Kiest u iets anders, dan stopt het schalen of draaien vanzelf.
+  if (STAAT.grepen && !STAAT.selektie.has(STAAT.grepen.e)) STAAT.grepen = null;
   el("vlak").querySelectorAll(".el").forEach(doos => {
     doos.classList.toggle("geselecteerd", doos.__element && STAAT.selektie.has(doos.__element));
   });
@@ -4191,7 +4218,7 @@ window.addEventListener("pointerdown", ev => {
   const m = document.getElementById("contextmenu");
   if (m && !m.contains(ev.target)) sluitContextMenu();
 }, true);
-window.addEventListener("keydown", ev => { if (ev.key === "Escape") sluitContextMenu(); }, true);
+window.addEventListener("keydown", ev => { if (ev.key === "Escape") { sluitContextMenu(); grepenWeg(); } }, true);
 let contextNetOpen = 0;
 
 window.addEventListener("scroll", () => {
@@ -4441,11 +4468,224 @@ async function kiesStijlBron(doel) {
   stijlOvernemen(doel, gekozen.e);
 }
 
+/* ------------------- schalen en draaien -------------------
+
+   In het rechtermuisklik-menu: "Schaal" en "Draaien". Dan komen er grepen ín het
+   element zelf te zitten — op de vier hoeken, in het midden van elke rand, en één
+   ronde erboven om te draaien. Omdat ze in het element zitten, bewegen ze mee.
+
+   Schalen gebeurt rond het midden, en dat is geen willekeur: `left` en `top`
+   wijzen in Home Assistant het midden van een element aan, dus zo blijft het
+   staan waar u het neerzette. Draaien gebeurt om datzelfde midden. Met shift
+   erbij blijft bij een hoekpunt de verhouding gelijk (en draait het in stappen
+   van 15°). */
+
+const GREEP_RICHTINGEN = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const GREEP_CURSOR = {
+  nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize", e: "ew-resize",
+  se: "nwse-resize", s: "ns-resize", sw: "nesw-resize", w: "ew-resize",
+};
+
+function greepModus(e, modus) {
+  if (!e) return;
+  if (!STAAT.selektie.has(e)) selecteer(e);
+  STAAT.grepen = { e, modus };
+  tekenAlles();
+  meld(modus === "schaal"
+    ? "Schaal: sleep een handvat. Met shift erbij blijft de verhouding gelijk. Escape stopt."
+    : "Draaien: sleep het ronde handvat. Met shift erbij in stappen van 15°. Escape stopt.");
+}
+
+function grepenWeg() {
+  if (!STAAT.grepen) return;
+  STAAT.grepen = null;
+  tekenAlles();
+}
+
+function grepenTeken(doos, e, modus) {
+  const maak = (klasse, stijl, uitleg, richting) => {
+    const g = document.createElement("div");
+    g.className = "greep" + (klasse ? " " + klasse : "");
+    for (const [k, v] of Object.entries(stijl)) g.style[k] = v;
+    g.title = uitleg;
+    if (richting) g.dataset.richting = richting;
+    g.addEventListener("pointerdown", ev => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();              // niet ook nog het element verslepen
+      // De greep houdt de aanwijzer vast, zodat het slepen niet stopt als u
+      // buiten het venster komt. Lukt dat niet, dan werkt het ook zonder.
+      try { g.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
+      if (modus === "draaien") draaiSleep(doos, e);
+      else schaalSleep(doos, e, richting);
+    });
+    doos.appendChild(g);
+  };
+  if (modus === "draaien") {
+    maak("draai", { left: "50%", top: "-24px" }, "sleep om te draaien", null);
+    return;
+  }
+  for (const r of GREEP_RICHTINGEN) {
+    const links = r.includes("w") ? "0%" : r.includes("e") ? "100%" : "50%";
+    const boven = r.includes("n") ? "0%" : r.includes("s") ? "100%" : "50%";
+    maak("", { left: links, top: boven, cursor: GREEP_CURSOR[r] },
+        `schaal ${r} — met shift blijft de verhouding`, r);
+  }
+}
+
+/* Een zwevend kaartje met de maat of de hoek, dat de muis volgt. */
+function greepLabel(ev) {
+  let l = document.getElementById("greep-label");
+  if (!l) {
+    l = document.createElement("div");
+    l.id = "greep-label";
+    document.body.appendChild(l);
+  }
+  l.style.left = (ev.clientX + 14) + "px";
+  l.style.top = (ev.clientY + 10) + "px";
+  return l;
+}
+
+function greepLabelWeg() {
+  const l = document.getElementById("greep-label");
+  if (l) l.remove();
+}
+
+/* Het midden van een element in beeldpunten: `left`/`top` zijn procenten van de
+   kaart en wijzen dat midden aan. */
+function elementMidden(e, vak) {
+  const st = e.style || {};
+  return {
+    x: vak.left + vak.width * (parseFloat(st.left ?? "50") / 100),
+    y: vak.top + vak.height * (parseFloat(st.top ?? "50") / 100),
+  };
+}
+
+function schaalSleep(doos, e, richting) {
+  const st = e.style || (e.style = {});
+  const vak = el("vlak").getBoundingClientRect();
+  if (vak.width < 10 || !richting) return;
+  const midden = elementMidden(e, vak);
+  const sleeptBreedte = richting.includes("w") || richting.includes("e");
+  const sleeptHoogte = richting.includes("n") || richting.includes("s");
+  const begin = { w: parseFloat(st.width) || 0, h: parseFloat(st.height) || 0 };
+  // De verhouding zoals het er nu staat — ook als er geen `height` is ingesteld.
+  const verhouding = doos.offsetWidth / Math.max(1, doos.offsetHeight);
+  onthoud();
+  let label = null;
+  const pct = (px, totaal) => Math.max(0.4, px / totaal * 100).toFixed(1) + "%";
+
+  const beweeg = ev => {
+    const dx = Math.abs(ev.clientX - midden.x) * 2;
+    const dy = Math.abs(ev.clientY - midden.y) * 2;
+    let breedtePx = sleeptBreedte ? dx : begin.w / 100 * vak.width;
+    let hoogtePx = sleeptHoogte ? dy : (begin.h ? begin.h / 100 * vak.height : 0);
+    if (ev.shiftKey && sleeptBreedte && sleeptHoogte) hoogtePx = breedtePx / verhouding;
+    if (sleeptBreedte) {
+      st.width = pct(breedtePx, vak.width);
+      doos.style.width = st.width;
+    }
+    if (sleeptHoogte) {
+      st.height = pct(hoogtePx, vak.height);
+      doos.style.height = st.height;
+    }
+    label = label || greepLabel(ev);
+    label.style.left = (ev.clientX + 14) + "px";
+    label.style.top = (ev.clientY + 10) + "px";
+    label.textContent = `breedte ${st.width || "eigen"}` + (st.height ? ` · hoogte ${st.height}` : "");
+  };
+
+  const stop = () => {
+    window.removeEventListener("pointermove", beweeg);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+    greepLabelWeg();
+    tekenAlles();
+    selecteer(e);
+    meld(`Schaal van "${naamVan(e)}": breedte ${st.width || "eigen"}` +
+         (st.height ? `, hoogte ${st.height}` : "") + ". ↶ draait het terug.", "serieus");
+  };
+  window.addEventListener("pointermove", beweeg);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
+}
+
+function draaiSleep(doos, e) {
+  const st = e.style || (e.style = {});
+  const vak = el("vlak").getBoundingClientRect();
+  const midden = elementMidden(e, vak);
+  const hoekVan = ev => Math.atan2(ev.clientY - midden.y, ev.clientX - midden.x) * 180 / Math.PI;
+  const begin = rotatieVan(st.transform);
+  // De aanwijzer ligt bij het begin boven het element: die hoek is het nulpunt,
+  // zodat een al gedraaid element gewoon verder draait in plaats van te springen.
+  const nul = hoekVan({ clientX: midden.x, clientY: midden.y - 100 });
+  onthoud();
+  let label = null;
+
+  const beweeg = ev => {
+    let graden = begin + (hoekVan(ev) - nul);
+    if (ev.shiftKey) graden = Math.round(graden / 15) * 15;
+    st.transform = metRotatie(st.transform, graden);
+    doos.style.transform = cssWaarde(st.transform);
+    label = label || greepLabel(ev);
+    label.style.left = (ev.clientX + 14) + "px";
+    label.style.top = (ev.clientY + 10) + "px";
+    label.textContent = `${Math.round(((graden % 360) + 360) % 360)}°`;
+  };
+
+  const stop = () => {
+    window.removeEventListener("pointermove", beweeg);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+    greepLabelWeg();
+    tekenAlles();
+    selecteer(e);
+    meld(`"${naamVan(e)}" staat nu op ` +
+         `${Math.round(((rotatieVan(st.transform) % 360) + 360) % 360)}°. ↶ draait het terug.`, "serieus");
+  };
+  window.addEventListener("pointermove", beweeg);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
+}
+
+/* De hoek uit een `transform`, of 0. */
+function rotatieVan(transform) {
+  const m = /rotate\(\s*(-?[\d.]+)deg\s*\)/.exec(String(transform || ""));
+  return m ? parseFloat(m[1]) : 0;
+}
+
+/* De transform zonder een `rotate(...)` erin; leeg als er niets anders stond. */
+function zonderRotatie(transform) {
+  return String(transform || "").replace(/rotate\(\s*-?[\d.]+deg\s*\)\s*/g, "").trim();
+}
+
+/* Een transform met deze hoek erin. Zonder eigen transform centreert Home
+   Assistant een element; zodra er wél een transform staat doet hij dat niet meer.
+   Daarom laten we die situatie zoals hij was: was er niets, dan zetten we het
+   centreren er nu expliciet bij — anders verschoof het element bij het draaien. */
+function metRotatie(transform, graden) {
+  const had = String(transform || "").trim();
+  const zonder = zonderRotatie(had);
+  const basis = !had ? "translate(-50%, -50%)" : zonder;
+  return (basis ? basis + " " : "") + `rotate(${Math.round(graden)}deg)`;
+}
+
 /* De regels van het rechtermuisklik-menu op een element: de voorwaarde, en het
    overnemen van de stijl van een ander element. */
 function elementMenuItems(e) {
   return [
     ...voorwaardeMenuItems(e),
+    { scheiding: true },
+    {
+      tekst: "Schaal",
+      uitleg: "handvatten om breder, hoger of allebei te maken — met shift blijft de verhouding gelijk",
+      doe: () => greepModus(e, "schaal"),
+    },
+    {
+      tekst: "Draaien",
+      uitleg: "een rond handvat om het element te draaien — met shift in stappen van 15°",
+      doe: () => greepModus(e, "draaien"),
+    },
     { scheiding: true },
     {
       tekst: "Stijl overnemen van ander element…",
@@ -4688,6 +4928,10 @@ function tekenInspector() {
       <label class="veld"><span>boven (midden)</span>
         <input id="i-boven" value="${st.top ?? "50%"}" ${ruis ? "disabled" : ""}></label>
       <label class="veld"><span>breedte</span><input id="i-breedte" value="${st.width ?? ""}"></label>
+      <label class="veld"><span>hoogte</span>
+        <input id="i-hoogte" placeholder="leeg = eigen verhouding" value="${st.height ?? ""}"></label>
+      <label class="veld"><span>rotatie (°)</span>
+        <input id="i-rotatie" placeholder="0" value="${st.transform ? rotatieVan(st.transform) : ""}"></label>
       <label class="veld"><span>z-index</span><input id="i-z" value="${st["z-index"] ?? ""}"></label>
     </div>
     <div class="legenda">pijltjestoetsen verplaatsen 0,5% · ctrl+scroll zoomt</div>
@@ -4715,7 +4959,8 @@ function tekenInspector() {
 
   const velden = {
     links: el("i-links"), boven: el("i-boven"),
-    breedte: el("i-breedte"), z: el("i-z"),
+    breedte: el("i-breedte"), hoogte: el("i-hoogte"),
+    rotatie: el("i-rotatie"), z: el("i-z"),
   };
 
   /* Zoeken en in één keer vervangen. Eigen knop, niet `Toepassen`: het veld
@@ -4753,6 +4998,17 @@ function tekenInspector() {
     st.top = velden.boven.value.trim() || st.top;
     const b = velden.breedte.value.trim();
     if (b) st.width = b; else delete st.width;
+    const h = velden.hoogte.value.trim();
+    if (h) st.height = h; else delete st.height;
+    // Rotatie hoort in `transform`. Leeg betekent: alleen de rotate eruit halen,
+    // zodat een eigen `translate(...)` blijft staan.
+    const r = velden.rotatie.value.trim();
+    if (r === "") {
+      const zonder = zonderRotatie(st.transform);
+      if (zonder) st.transform = zonder; else delete st.transform;
+    } else {
+      st.transform = metRotatie(st.transform, parseFloat(r) || 0);
+    }
     const z = velden.z.value.trim();
     if (z) st["z-index"] = z; else delete st["z-index"];
     const inhoud = el("i-inhoud");
