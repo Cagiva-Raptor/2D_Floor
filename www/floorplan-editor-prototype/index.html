@@ -60,6 +60,11 @@
   }
   .gereedschap button svg { display: block; width: 17px; height: 17px; }
   .gereedschap button.aan { background: var(--accent-dim); border-color: var(--accent); }
+  /* Deze knoppenrij begint altijd op een eigen regel, ook als het venster breed
+     genoeg is: `flex-basis: 100%` past niet naast de rest, dus wikkelt de kop
+     hem naar de volgende regel. Zonder dit schoof de rij bij elke versmalling
+     heen en weer en stonden de knoppen telkens ergens anders. */
+  header .eigen-regel { flex: 0 0 100%; }
   /* Vaste lege ruimte in de knoppenrij: houdt de plaats vrij tussen de
      gereedschapsknoppen en Ongedaan, en tussen Ongedaan en Herstellen. */
   header .groep .spacer { width: 18px; flex: none; }
@@ -754,7 +759,7 @@
     <span class="tag" id="label-condities"></span>
   </div>
 
-  <div class="groep gereedschap" role="group" aria-label="balken en knoppenrij">
+  <div class="groep gereedschap eigen-regel" role="group" aria-label="balken en knoppenrij">
     <button id="knop-balk-toevoegen" type="button" aria-pressed="false"
             title="Devices/Entities: balk 'Toevoegen' tonen of verbergen"></button>
     <button id="knop-balk-lijst" type="button" class="aan" aria-pressed="true"
