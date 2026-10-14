@@ -2767,6 +2767,17 @@ function takken(uitdrukking) {
   return [s.trim()];
 }
 
+/* Ziet dit eruit als een uitdrukking die wij niet kunnen uitrekenen? De kaart
+   gebruikt JavaScript in `image` en `state_image` — het beeld van de televisie
+   hangt bijvoorbeeld van een sensor af. Wij kennen `states` en `vars` niet, dus
+   zo'n waarde levert geen bestandsnaam op. Vragen we hem toch op, dan vraagt de
+   browser om een half uitgerekende URL en geeft Home Assistant een 404 in de
+   console. Liever niets vragen dan iets fouts. */
+function isUitdrukking(waarde) {
+  const t = String(waarde == null ? "" : waarde);
+  return /\$\{|\bstates\[|\bvars\[|\bconfig\.|\bhass\./.test(t) || /\s\+\s/.test(t);
+}
+
 function pad(uitdrukking) {
   const kandidaten = takken(uitdrukking);
   let keuze = kandidaten[0];
@@ -2775,6 +2786,8 @@ function pad(uitdrukking) {
     keuze = kandidaten[1];
   }
   keuze = keuze.replace(/vars\[0\]\s*\+\s*/g, "").replace(/["']/g, "").trim();
+  // Blijft er nog uitdrukking over, dan kennen wij de bestandsnaam niet.
+  if (!keuze || isUitdrukking(keuze)) return "";
   const basis = `/local/jdi_custom_images/floorplans/first_floor/${STAAT.variant}/`;
   if (keuze.startsWith("/local/")) return keuze;
   if (keuze.startsWith("local/")) return "/" + keuze;
@@ -3304,8 +3317,19 @@ function tekenEchteInhoud(e, doos) {
              : (beeld ? !w.afbeelding : !w.icoon)) return;
 
   if (beeld) {
+    const bron = pad(e.image || e.state_image.on);
+    // Geen bestandsnaam te maken (het beeld hangt van Home Assistant af)? Dan
+    // vraagt de editor niets op, en tonen we de naam zodat het element zichtbaar
+    // en aanklikbaar blijft.
+    if (!bron) {
+      const v = vakje(e, false);
+      v.title = "het beeld van dit element hangt van Home Assistant af — " +
+        "de editor kan die uitdrukking niet uitrekenen";
+      doos.appendChild(v);
+      return;
+    }
     const img = document.createElement("img");
-    img.src = pad(e.image || e.state_image.on);
+    img.src = bron;
     img.alt = "";
     img.onerror = () => {
       const v = vakje(e, false);
@@ -4944,7 +4968,10 @@ function verdiepInstelling(view) {
 function verdiepAfbeelding(variant, kaart) {
   const inst = verdiepInstelling(STAAT.view);
   const perVariant = inst.afbeeldingen && inst.afbeeldingen[variant];
-  return perVariant || afbeeldingVan(kaart) || "home.png";
+  // Een uitdrukking in de instellingen is geen bestandsnaam: dan liever wat de
+  // kaart noemt, of home.png.
+  const eigen = perVariant && !isUitdrukking(perVariant) ? perVariant : "";
+  return eigen || afbeeldingVan(kaart) || "home.png";
 }
 
 /* De floors uit Home Assistant, voor het koppeldropdownje. Eén klein commando;
@@ -6134,7 +6161,7 @@ const VARIANTEN = [...document.querySelectorAll("#variant option")].map(o => o.v
    kiest — een naam die alleen in `day/` ligt, geeft 's nachts een lege
    achtergrond zonder dat iemand zegt waarom. `null` = geen uitsluitsel. */
 async function variantBestaat(variant, naam) {
-  if (!variant || !naam) return null;
+  if (!variant || !naam || isUitdrukking(naam)) return null;
   const url = `/local/jdi_custom_images/floorplans/first_floor/` +
     `${encodeURIComponent(variant)}/${encodeURIComponent(naam)}`;
   try {
@@ -6149,6 +6176,11 @@ async function variantBestaat(variant, naam) {
    handeling in plaats van zes keer hetzelfde bestand ophalen. Geeft een zin terug
    voor de melding, of null als het misging (dan is er al gemeld). */
 async function kopieerNaarOntbrekendeVarianten(bronVariant, naamBron, afbeeldingen) {
+  if (isUitdrukking(naamBron)) {
+    meld(`${bronVariant} staat op een uitdrukking in plaats van een bestandsnaam — ` +
+         `er is niets gevuld.`, "fout");
+    return null;
+  }
   const bronUrl = `/local/jdi_custom_images/floorplans/first_floor/` +
     `${encodeURIComponent(bronVariant)}/${encodeURIComponent(naamBron)}`;
   let blob = null;
