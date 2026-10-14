@@ -40,7 +40,7 @@
         {
           "id": "nachtkastje",
           "naam": "nachtkastje",
-          "breedte": "4%",
+          "breedte": "3%",
           "stijlen": [
             "lijn",
             "effen",
@@ -105,7 +105,7 @@
         {
           "id": "vloerlamp",
           "naam": "vloerlamp",
-          "breedte": "4%",
+          "breedte": "3%",
           "stijlen": [
             "lijn",
             "effen",
@@ -140,7 +140,7 @@
         {
           "id": "koelkast",
           "naam": "koelkast",
-          "breedte": "6%",
+          "breedte": "4%",
           "stijlen": [
             "lijn",
             "effen",
@@ -150,7 +150,7 @@
         {
           "id": "dampkap",
           "naam": "dampkap",
-          "breedte": "10%",
+          "breedte": "4%",
           "stijlen": [
             "lijn",
             "effen",
@@ -210,7 +210,7 @@
         {
           "id": "wasmachine",
           "naam": "wasmachine",
-          "breedte": "6%",
+          "breedte": "4%",
           "stijlen": [
             "lijn",
             "effen",
@@ -220,7 +220,7 @@
         {
           "id": "droogkast",
           "naam": "droogkast",
-          "breedte": "6%",
+          "breedte": "4%",
           "stijlen": [
             "lijn",
             "effen",
@@ -230,7 +230,7 @@
         {
           "id": "ventilator",
           "naam": "ventilator",
-          "breedte": "5%",
+          "breedte": "3%",
           "stijlen": [
             "lijn",
             "effen",
