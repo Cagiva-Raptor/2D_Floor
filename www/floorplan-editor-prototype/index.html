@@ -597,11 +597,14 @@
   /* De grepen om te schalen en te draaien. Ze zitten ín het element, dus ze
      bewegen mee als u het versleept; `position: absolute` met een halve marge
      zet ze precies op de hoek of het midden van de rand. */
+  /* Randgrepen zijn rond — die schalen één richting. Hoekgrepen zijn vierkant —
+     die schalen breedte én hoogte. Zo ziet u vooraf wat een greep gaat doen. */
   .greep {
-    position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px;
-    background: var(--accent); border: 1px solid #fff; border-radius: 2px;
+    position: absolute; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+    background: var(--accent); border: 1px solid #fff; border-radius: 50%;
     box-shadow: 0 0 4px #000a; z-index: 9800; touch-action: none;
   }
+  .greep.hoek { border-radius: 2px; }
   .greep.draai {
     border-radius: 50%; background: var(--waarschuwing); cursor: grab;
     width: 14px; height: 14px; margin: -7px 0 0 -7px;
@@ -1138,6 +1141,18 @@ function isGewijzigd() {
   return !!STAAT.voorbeeld && JSON.stringify(STAAT.doc) !== STAAT.voorbeeld;
 }
 
+/* Wanneer is deze editor voor het laatst bijgewerkt? Zo ziet u of uw browser niet
+   nog een oude versie vasthoudt — na een wijziging moet u hard verversen (Ctrl+F5).
+   `document.lastModified` komt uit de kop die Home Assistant meestuurt; is die er
+   niet, dan zeggen we niets in plaats van iets onzinnigs. */
+function editorStempel() {
+  const d = new Date(document.lastModified);
+  if (!isFinite(d.getTime()) || d.getFullYear() < 2000) return "";
+  const datum = d.toLocaleDateString("nl-NL", { day: "numeric", month: "long" });
+  const tijd = d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+  return ` · editor van ${datum} ${tijd}`;
+}
+
 async function laad() {
   // Altijd het háldige bestand: zonder `t=` kan de browser een oude kopie
   // terugserveren en zou het herladen van de pagina de statussen — en de rest —
@@ -1257,7 +1272,7 @@ async function laad() {
   // tikje te groot. Opnieuw meten kost niets en scheelt een verschuiving.
   pasVlakAan();
   meld(
-    `${aantal()} elementen, ${STAAT.bron}. ` +
+    `${aantal()} elementen, ${STAAT.bron}${editorStempel()}. ` +
     `${zoneHerstelMelding}${zoneOpslagTekst()}. ` +
     `Standaard staat Pan aan: slepen verplaatst het beeld. ` +
     `Zet op Select om elementen te schuiven; daar kiest u er meerdere. ` +
@@ -4559,8 +4574,11 @@ function grepenTeken(doos, e, modus) {
   for (const r of GREEP_RICHTINGEN) {
     const links = r.includes("w") ? "0%" : r.includes("e") ? "100%" : "50%";
     const boven = r.includes("n") ? "0%" : r.includes("s") ? "100%" : "50%";
-    maak("", { left: links, top: boven, cursor: GREEP_CURSOR[r] },
-        `schaal ${r} — met shift blijft de verhouding`, r);
+    const hoek = r.length === 2;                     // nw, ne, se, sw
+    const wat = hoek ? "breedte én hoogte"
+      : (r === "e" || r === "w") ? "alleen de breedte" : "alleen de hoogte";
+    maak(hoek ? "hoek" : "", { left: links, top: boven, cursor: GREEP_CURSOR[r] },
+        `schaal ${r} — ${wat} (met shift blijft de verhouding)`, r);
   }
 }
 
@@ -4654,7 +4672,14 @@ function schaalSleep(doos, e, richting) {
       st.height = pct(hoogtePx, vak.height);
       doos.style.height = st.height;
     }
-    label.textContent = `breedte ${st.width || "eigen"}` + (st.height ? ` · hoogte ${st.height}` : "");
+    // Zeggen wat er verandert én wat blijft: dan is meteen te zien dat een
+    // randgreep maar één richting doet.
+    if (sleeptBreedte) {
+      label.textContent = `breedte ${st.width || "eigen"}` +
+        (st.height ? (sleeptHoogte ? ` · hoogte ${st.height}` : ` · hoogte blijft ${st.height}`) : "");
+    } else {
+      label.textContent = `hoogte ${st.height || "eigen"}` + (st.width ? ` · breedte blijft ${st.width}` : "");
+    }
   };
 
   const stop = () => {
