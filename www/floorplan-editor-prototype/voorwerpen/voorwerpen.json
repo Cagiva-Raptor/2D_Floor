@@ -240,6 +240,31 @@
       ]
     },
     {
+      "naam": "Sport",
+      "voorwerpen": [
+        {
+          "id": "loopband",
+          "naam": "loopband",
+          "breedte": "6%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        },
+        {
+          "id": "hometrainer",
+          "naam": "hometrainer",
+          "breedte": "3%",
+          "stijlen": [
+            "lijn",
+            "effen",
+            "mdi"
+          ]
+        }
+      ]
+    },
+    {
       "naam": "Bouw",
       "voorwerpen": [
         {
