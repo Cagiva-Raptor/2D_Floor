@@ -4814,6 +4814,30 @@ function metRotatie(transform, graden) {
   return metTransform(transform, graden, s.x, s.y);
 }
 
+/* Een element — of een hele selectie — achter de entiteiten zetten: het schuift
+   in de lijst naar voren tot vóór het eerste element met een entiteit. Hun
+   onderlinge volgorde blijft daarbij bewaard. */
+function achterDeEntiteiten(een) {
+  const lijst = STAAT.kaart && STAAT.kaart.elements;
+  if (!lijst || !een) return;
+  const gevraagd = STAAT.selektie.has(een) ? [...STAAT.selektie] : [een];
+  const inLijst = lijst.filter(x => gevraagd.includes(x));
+  if (!inLijst.length) {
+    meld("Dit element zit in een voorwaarde en niet rechtstreeks in de kaart — " +
+         "zet het niet achter de entiteiten.", "fout");
+    return;
+  }
+  onthoud();
+  for (const x of inLijst) lijst.splice(lijst.indexOf(x), 1);
+  const doel = lijst.findIndex(z => z && (z.entity || (z.conditions && z.conditions.length)));
+  lijst.splice(doel < 0 ? lijst.length : doel, 0, ...inLijst);
+  bouwStaats();
+  tekenAlles();
+  tekenZoeklijst();
+  meld(`${inLijst.length} element${inLijst.length === 1 ? "" : "en"} achter de entiteiten ` +
+       `gezet — de iconen en labels liggen nu bovenop. ↶ draait het terug.`, "serieus");
+}
+
 /* De regels van het rechtermuisklik-menu op een element: de voorwaarde, en het
    overnemen van de stijl van een ander element. */
 function elementMenuItems(e) {
@@ -4829,6 +4853,11 @@ function elementMenuItems(e) {
       tekst: "Draaien",
       uitleg: "een rond handvat om het element te draaien — met shift in stappen van 15°",
       doe: () => greepModus(e, "draaien"),
+    },
+    {
+      tekst: "Achter de entiteiten",
+      uitleg: "dit element — of de hele selectie — onder de iconen en labels zetten; de volgorde in de kaart bepaalt wat bovenop ligt",
+      doe: () => achterDeEntiteiten(e),
     },
     { scheiding: true },
     {
@@ -5756,6 +5785,17 @@ function voorwerpPad(v, stijl) {
   return `/local/floorplan-editor-prototype/voorwerpen/${stijl}/${v.id}.svg`;
 }
 
+/* Waar een voorwerp in de lijst hoort: vóór het eerste element met een entiteit.
+   In een picture-elements kaart beslist de volgorde wie bovenop ligt — wat later
+   staat, ligt hoger — en een icoon, badge of label hoort altijd zichtbaar te
+   blijven. Zo komt een meubel boven de achtergrondafbeeldingen (die hebben geen
+   entiteit) maar onder de entiteiten. */
+function voorwerpIndex() {
+  const lijst = (STAAT.kaart && STAAT.kaart.elements) || [];
+  const i = lijst.findIndex(e => e && (e.entity || (e.conditions && e.conditions.length)));
+  return i < 0 ? lijst.length : i;
+}
+
 function voegVoorwerpToe(id, positie) {
   if (!STAAT.kaart) {
     meld("Deze verdieping heeft nog geen kaart — maak er eerst een met de + naast 'verdiep'.",
@@ -5789,7 +5829,8 @@ function voegVoorwerpToe(id, positie) {
   const bron = stijlBron(nieuw.image);
   if (bron && bron.e !== nieuw) stijlVan(nieuw, bron.e);
   onthoud();
-  STAAT.kaart.elements.push(nieuw);
+  // Achter de entiteiten, niet erboven: zie `voorwerpIndex`.
+  STAAT.kaart.elements.splice(voorwerpIndex(), 0, nieuw);
   bouwStaats();
   tekenAlles();
   tekenZoeklijst();
