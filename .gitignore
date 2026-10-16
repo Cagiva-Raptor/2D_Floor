@@ -24,6 +24,8 @@
 !www/floorplan-editor-prototype/voorwerpen/
 !www/floorplan-editor-prototype/voorwerpen/*.json
 !www/floorplan-editor-prototype/voorwerpen/*.md
+!www/floorplan-editor-prototype/voorwerpen/gebruiker/
+!www/floorplan-editor-prototype/voorwerpen/gebruiker/*
 !www/floorplan-editor-prototype/voorwerpen/lijn/
 !www/floorplan-editor-prototype/voorwerpen/lijn/*.svg
 !www/floorplan-editor-prototype/voorwerpen/effen/

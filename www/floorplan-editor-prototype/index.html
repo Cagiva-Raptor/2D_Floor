@@ -594,6 +594,24 @@
   }
   #inspector-paneel .tabpaneel.verborgen { display: none; }
   #inspector-paneel pre { max-height: 320px; }
+  /* De svg-editor in een zwevend frame, net als de inspectie: hij hangt aan
+     `main`, dus nooit over het menu, en hij is aan zijn titelbalk te verslepen. */
+  #svg-paneel {
+    position: absolute; top: 8px; right: 360px; width: 780px; height: 580px;
+    max-width: calc(100% - 24px); max-height: calc(100% - 16px);
+    background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, .55); z-index: 70;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #svg-paneel.verborgen { display: none; }
+  #svg-paneel .kop {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-bottom: 1px solid var(--lijn);
+    cursor: move; user-select: none; touch-action: none;
+  }
+  #svg-paneel .kop > span { flex: 1; font-size: 13px; font-weight: 600; }
+  #svg-houder { flex: 1; min-height: 0; }
+  #svg-houder iframe { width: 100%; height: 100%; border: 0; display: block; background: #1e1f24; }
   /* De grepen om te schalen en te draaien. Ze zitten ín het element, dus ze
      bewegen mee als u het versleept; `position: absolute` met een halve marge
      zet ze precies op de hoek of het midden van de rand. */
@@ -796,6 +814,8 @@
             title="Statussen opnieuw ophalen uit statussen.json"></button>
     <button id="knop-haaldashboard" type="button"
             title="Het dashboard ophalen uit Home Assistant — de editor begint opnieuw op de háldige stand"></button>
+    <button id="knop-svgeditor" type="button"
+            title="De svg-editor openen — zelf een tekening maken of een bestaand voorwerp aanpassen"></button>
     <span class="spacer" aria-hidden="true"></span>
     <button id="knop-ongedaan" title="Ongedaan"></button>
     <span class="spacer" aria-hidden="true"></span>
@@ -917,6 +937,17 @@
     <div class="tabpaneel verborgen" id="tabpaneel-yaml" role="tabpanel">
       <pre id="yaml" class="leeg">—</pre>
     </div>
+  </aside>
+  <!-- De svg-editor in een zwevend frame. Hij wordt pas geladen als u hem opent,
+       zodat een sessie waarin u hem niet gebruikt er niets van merkt; daarna
+       blijft hij staan, zodat uw tekening niet verdwijnt als u hem even dichtdoet. -->
+  <aside id="svg-paneel" class="verborgen">
+    <div class="kop" title="sleep deze titelbalk om het venster te verplaatsen">
+      <span>SVG-editor</span>
+      <button id="svg-bibliotheek" title="de tekening uit de editor in de voorwerpenbibliotheek zetten">Naar de bibliotheek</button>
+      <button id="svg-sluit" title="dit venster sluiten (uw tekening blijft in het frame staan)">×</button>
+    </div>
+    <div id="svg-houder"></div>
   </aside>
 </main>
 
@@ -1159,7 +1190,7 @@ async function laad() {
   // van gisteren tonen terwijl u die bestanden vandaag hebt ververst. De ⟳-knop
   // deed dit al voor statussen.json; een herladen moet hetzelfde opleveren.
   const t = Date.now();
-  const [doc, ent, ico, zon, stat, app, vwp] = await Promise.all([
+  const [doc, ent, ico, zon, stat, app, vwp, vwg] = await Promise.all([
     fetch(`plattegrond.json?t=${t}`).then(r => r.json()),
     fetch(`entiteiten.json?t=${t}`).then(r => r.json()),
     fetch(`iconen.json?t=${t}`).then(r => r.json()),
@@ -1176,9 +1207,14 @@ async function laad() {
     // voorwerpen.json: de bibliotheek met tekeningen, per kamer gegroepeerd.
     // Ontbreekt hij, dan blijft de rest van de editor gewoon werken.
     fetch(`voorwerpen/voorwerpen.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+    // gebruiker.json: de tekeningen die u zelf in de svg-editor hebt gemaakt.
+    // Ontbreekt het bestand, dan is er nog niets eigens — dat is geen fout.
+    fetch(`voorwerpen/gebruiker.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   STAAT.doc = doc;
   STAAT.voorwerpen = vwp;
+  STAAT.eigenVoorwerpen = Array.isArray(vwg) ? vwg : [];
+  voorwerpenSamenvoegen();
   bouwVoorwerpStijl();
   STAAT.entiteiten = ent.entiteiten;
   STAAT.namen = Object.fromEntries((ent.entiteiten || []).map(e => [e.id, e.naam]));
@@ -2908,7 +2944,8 @@ function isAfbeelding(e) {
    Material Design Icons, dezelfde bron als de rest. */
 const ICONEN_EXTRA = {
   // Het vraagteken voor "dit icoon kennen we niet" — zie de terugval onderaan tekenEchteInhoud.
-  // Het zitbank-symbool voor de voorwerpenlijst (de andere komen uit iconen.json).
+  // Het potlood voor de svg-editor, en het zitbank-symbool voor de voorwerpenlijst.
+  "mdi:draw": "M9.75 20.85C11.53 20.15 11.14 18.22 10.24 17C9.35 15.75 8.12 14.89 6.88 14.06C6 13.5 5.19 12.8 4.54 12C4.26 11.67 3.69 11.06 4.27 10.94C4.86 10.82 5.88 11.4 6.4 11.62C7.31 12 8.21 12.44 9.05 12.96L10.06 11.26C8.5 10.23 6.5 9.32 4.64 9.05C3.58 8.89 2.46 9.11 2.1 10.26C1.78 11.25 2.29 12.25 2.87 13.03C4.24 14.86 6.37 15.74 7.96 17.32C8.3 17.65 8.71 18.04 8.91 18.5C9.12 18.94 9.07 18.97 8.6 18.97C7.36 18.97 5.81 18 4.8 17.36L3.79 19.06C5.32 20 7.88 21.47 9.75 20.85M20.84 5.25C21.06 5.03 21.06 4.67 20.84 4.46L19.54 3.16C19.33 2.95 18.97 2.95 18.76 3.16L17.74 4.18L19.82 6.26M11 10.92V13H13.08L19.23 6.85L17.15 4.77L11 10.92Z",
   "mdi:sofa": "M12.5 7C12.5 5.89 13.39 5 14.5 5H18C19.1 5 20 5.9 20 7V9.16C18.84 9.57 18 10.67 18 11.97V14H12.5V7M6 11.96V14H11.5V7C11.5 5.89 10.61 5 9.5 5H6C4.9 5 4 5.9 4 7V9.15C5.16 9.56 6 10.67 6 11.96M20.66 10.03C19.68 10.19 19 11.12 19 12.12V15H5V12C5 10.9 4.11 10 3 10S1 10.9 1 12V17C1 18.1 1.9 19 3 19V21H5V19H19V21H21V19C22.1 19 23 18.1 23 17V12C23 10.79 21.91 9.82 20.66 10.03Z",
   "mdi:help-circle-outline": "M11,18H13V16H11V18M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,6A4,4 0 0,0 8,10H10A2,2 0 0,1 12,8A2,2 0 0,1 14,10C14,12 11,11.75 11,15H13C13,12.75 16,12.5 16,10A4,4 0 0,0 12,6Z",
   "mdi:battery": "M16.67,4H15V2H9V4H7.33A1.33,1.33 0 0,0 6,5.33V20.67C6,21.4 6.6,22 7.33,22H16.67A1.33,1.33 0 0,0 18,20.67V5.33C18,4.6 17.4,4 16.67,4Z",
@@ -3079,6 +3116,7 @@ function tekenGereedschap() {
     ["knop-balk-lijst", "mdi:filter-variant", "▽"],
     ["knop-refresh", "mdi:refresh", "⟳"],
     ["knop-haaldashboard", "mdi:cloud-download", "☁"],
+    ["knop-svgeditor", "mdi:draw", "✎"],
     ["knop-ongedaan", "mdi:undo", "↶"],
     ["knop-herstellen", "mdi:restore", "↻"],
     ["knop-export", "mdi:export", "⤓"],
@@ -5693,7 +5731,7 @@ function tekenZoeklijst() {
     let aantal = 0;
     for (const groep of (STAAT.voorwerpen && STAAT.voorwerpen.groepen) || []) {
       const erin = groep.voorwerpen
-        .filter(v => (v.stijlen || []).includes(stijl))
+        .filter(v => v.pad || (v.stijlen || []).includes(stijl))
         .filter(v => !zoek || v.naam.toLowerCase().includes(zoek));
       if (!erin.length) continue;
       const blok = document.createElement("optgroup");
@@ -5836,7 +5874,51 @@ function voorwerpVan(id) {
 }
 
 function voorwerpPad(v, stijl) {
+  // Eigen voorwerpen (uit de svg-editor) hebben één bestand en dus geen stijlen:
+  // hun volledige pad staat in het manifest.
+  if (v.pad) return v.pad;
   return `/local/floorplan-editor-prototype/voorwerpen/${stijl}/${v.id}.svg`;
+}
+
+/* De eigen voorwerpen (gebruiker.json) achter de gegenereerde bibliotheek zetten.
+   Ze hebben één bestand en dus geen stijlkeuze; `pad` maakt dat de rest van de
+   editor ze gewoon vindt. Bij een nieuwe lading eerst de oude opruimen, anders
+   staat elk voorwerp er na twee keer laden dubbel in. */
+function voorwerpenSamenvoegen() {
+  if (!STAAT.voorwerpen || !Array.isArray(STAAT.voorwerpen.groepen)) return;
+  for (const g of STAAT.voorwerpen.groepen) {
+    g.voorwerpen = (g.voorwerpen || []).filter(v => v && !v.pad);
+  }
+  for (const v of STAAT.eigenVoorwerpen || []) {
+    if (!v || !v.id || !v.pad) continue;
+    const naam = v.groep || "Eigen";
+    let groep = STAAT.voorwerpen.groepen.find(g => g.naam === naam);
+    if (!groep) {
+      groep = { naam, voorwerpen: [] };
+      STAAT.voorwerpen.groepen.push(groep);
+    }
+    groep.voorwerpen.push({
+      id: v.id, naam: v.naam || v.id, breedte: v.breedte || "4%", pad: v.pad,
+    });
+  }
+  STAAT.voorwerpen.groepen = STAAT.voorwerpen.groepen.filter(
+    g => (g.voorwerpen || []).length
+  );
+}
+
+/* De twee manifesten opnieuw ophalen: na het bewaren van een eigen tekening staat
+   hij dan meteen in de lijst. */
+async function voorwerpenHerladen() {
+  const t = Date.now();
+  const [m, g] = await Promise.all([
+    fetch(`voorwerpen/voorwerpen.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(`voorwerpen/gebruiker.json?t=${t}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]);
+  if (m) STAAT.voorwerpen = m;
+  STAAT.eigenVoorwerpen = Array.isArray(g) ? g : [];
+  voorwerpenSamenvoegen();
+  bouwVoorwerpStijl();
+  tekenZoeklijst();
 }
 
 /* Waar een voorwerp in de lijst hoort: vóór het eerste element met een entiteit.
@@ -6804,6 +6886,155 @@ function paneelPlekTerug() {
 })();
 
 paneelPlekTerug();
+
+/* --------------------- de svg-editor ---------------------
+
+   Een eigen editor voor losse tekeningen, in een frame naast deze. Hij wordt pas
+   geladen als u hem opent (scheelt een halve megabyte werk bij het opstarten) en
+   blijft daarna staan, zodat uw tekening niet verdwijnt als u hem even dichtdoet.
+
+   Wat u tekent gaat naar de voorwerpenbibliotheek: het bestand komt in
+   voorwerpen/gebruiker/ en er komt een regel in gebruiker.json, zodat het meteen
+   in de voorwerpenlijst staat. Dat wegschrijven doet de integratie via
+   `PUT /api/floorplan_layout/voorwerp` — een browser mag dat zelf niet doen. */
+
+function svgZet(open) {
+  const p = el("svg-paneel");
+  if (!p) return;
+  if (open) {
+    const houder = el("svg-houder");
+    if (houder && !houder.querySelector("iframe")) {
+      const f = document.createElement("iframe");
+      // Met een tijdstempel, zodat de browser een bijgewerkte editor ophaalt in
+      // plaats van de versie die hij nog kent.
+      f.src = `/local/svg-editor/index.html?t=${Date.now()}`;
+      f.title = "SVG-editor";
+      houder.appendChild(f);
+    }
+  }
+  p.classList.toggle("verborgen", !open);
+}
+el("svg-sluit").onclick = () => svgZet(false);
+el("knop-svgeditor").onclick = () =>
+  svgZet(el("svg-paneel").classList.contains("verborgen"));
+
+/* De tekening uit het frame halen. De svg-editor toont de tekening in een
+   tekstvak; dat ene tekstvak met een `<svg>` erin is wat we willen hebben. */
+function svgUitFrame() {
+  const houder = el("svg-houder");
+  const f = houder && houder.querySelector("iframe");
+  let doc = null;
+  try { doc = f && f.contentDocument; } catch (_) { return ""; }
+  if (!doc) return "";
+  const metSvg = [...doc.querySelectorAll("textarea")]
+    .filter(t => /<svg[\s>]/i.test(t.value || ""));
+  if (!metSvg.length) return "";
+  metSvg.sort((a, b) => (b.value || "").length - (a.value || "").length);
+  return metSvg[0].value;
+}
+
+async function svgNaarBibliotheek() {
+  const svg = svgUitFrame();
+  if (!svg) {
+    meld("Er staat nog geen tekening in de editor om te bewaren.", "fout");
+    return;
+  }
+  const groepen = [...new Set(
+    ((STAAT.voorwerpen && STAAT.voorwerpen.groepen) || []).map(g => g.naam)
+  )];
+  const invul = await vraagVenster({
+    kop: "Eigen voorwerp bewaren",
+    uitleg: "De tekening komt in de map voorwerpen/gebruiker/ en verschijnt meteen in " +
+      "de voorwerpenlijst. De kleuren van de lijn-stijl zijn vulling #eef1f5 en rand " +
+      "#2b3138 (lijndikte 3), dan valt hij niet uit de toon.",
+    velden: [
+      { sleutel: "naam", label: "naam van het voorwerp", waarde: "",
+        placeholder: "bijvoorbeeld yogamat" },
+      { sleutel: "groep", label: "in welke groep", type: "keuze",
+        opties: ["Eigen"].concat(groepen), waarde: "Eigen" },
+      { sleutel: "breedte", label: "breedte op de kaart", waarde: "4%",
+        placeholder: "zoals 4%",
+        letOp: "een percentage van de kaartbreedte — bij u is 1% ongeveer 15 cm" },
+    ],
+    okTekst: "Bewaren",
+    cancelTekst: "Annuleren",
+  });
+  if (!invul) return;
+
+  const inst = haInstelling();
+  if (!inst.url || !inst.token) {
+    meld("Bewaren kan niet: vul eerst het adres en het token in (⚙).", "fout");
+    return;
+  }
+  meld("De tekening naar de bibliotheek schrijven…");
+  try {
+    const r = await fetch(`${inst.url.replace(/\/+$/, "")}/api/floorplan_layout/voorwerp`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${inst.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        naam: (invul.naam || "").trim(),
+        groep: (invul.groep || "Eigen").trim(),
+        breedte: (invul.breedte || "").trim(),
+        svg,
+      }),
+    });
+    let antwoord = {};
+    try { antwoord = await r.json(); } catch (_) { /* geen JSON */ }
+    if (!r.ok) {
+      meld(`Bewaren mislukt: ${antwoord.message || "HTTP " + r.status}`, "fout");
+      return;
+    }
+    await voorwerpenHerladen();
+    meld(`"${antwoord.naam}" staat in de bibliotheek (groep ${antwoord.groep}, ` +
+      `${antwoord.breedte} breed) — u vindt hem in de voorwerpenlijst.`, "serieus");
+  } catch (e) {
+    meld(`Bewaren mislukt: ${e}. Is het endpoint nog niet bekend, herstart Home ` +
+      `Assistant dan — een nieuwe view wordt pas bij een herstart ingelezen.`, "fout");
+  }
+}
+el("svg-bibliotheek").onclick = () => svgNaarBibliotheek();
+
+/* Het frame aan zijn titelbalk verslepen, binnen `main` — dus nooit over het menu
+   en nooit half buiten beeld. */
+function maakVrijSleepbaar(paneelId) {
+  const p = el(paneelId);
+  const main = document.querySelector("main");
+  const kop = p && p.querySelector(".kop");
+  if (!p || !main || !kop) return;
+  const klem = (l, t) => {
+    const m = main.getBoundingClientRect();
+    const breed = p.offsetWidth;
+    const hoog = Math.min(p.offsetHeight, m.height);
+    p.style.right = "auto";
+    p.style.left = Math.round(Math.min(Math.max(0, l), Math.max(0, m.width - breed))) + "px";
+    p.style.top = Math.round(Math.min(Math.max(0, t), Math.max(0, m.height - hoog))) + "px";
+  };
+  kop.onpointerdown = ev => {
+    if (ev.target.closest("button")) return;
+    ev.preventDefault();
+    const m = main.getBoundingClientRect();
+    const r = p.getBoundingClientRect();
+    const greep = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    p.style.right = "auto";
+    p.style.left = (r.left - m.left) + "px";
+    p.style.top = (r.top - m.top) + "px";
+    try { kop.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
+    const beweeg = e2 =>
+      klem(e2.clientX - greep.x - m.left, e2.clientY - greep.y - m.top);
+    const stop = () => {
+      window.removeEventListener("pointermove", beweeg);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", beweeg);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+}
+maakVrijSleepbaar("svg-paneel");
 
 /* Een foto van uw computer naar de plaatjesmap van Home Assistant.
 

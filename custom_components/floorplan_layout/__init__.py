@@ -25,7 +25,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -502,6 +504,131 @@ class FloorplanAfbeeldingView(HomeAssistantView):
         return self.json({"bestand": pad, "bytes": len(data)})
 
 
+# Eigen voorwerpen: tekeningen die de gebruiker zelf maakt in de svg-editor. Ze
+# staan naast de gegenereerde bibliotheek (voorwerpen/<stijl>/…) in hun eigen map,
+# met hun eigen manifest. Zo kan de generator die de andere tekeningen maakt er
+# nooit iets van overschrijven of weggooien.
+VOORWERP_MAP = "floorplan-editor-prototype/voorwerpen"
+VOORWERP_EIGEN = "gebruiker"
+VOORWERP_MANIFEST = "gebruiker.json"
+MAX_VOORWERP_BYTES = 512 * 1024
+VOORWERP_LOCK = threading.Lock()
+VOORWERP_NAAM = re.compile(r"^[a-z0-9][a-z0-9_-]{0,38}[a-z0-9]$")
+
+
+def _voorwerp_wortel(hass: HomeAssistant) -> Path:
+    """De map waarin de voorwerpen van de editor staan (onder www)."""
+    return Path(hass.config.path("www")) / VOORWERP_MAP
+
+
+def _voorwerp_id(naam: str) -> str:
+    """Een veilige bestandsnaam: kleine letters, cijfers, streepjes en liggende streepjes."""
+    ruw = naam.strip().lower().replace(" ", "-")
+    ruw = re.sub(r"[^a-z0-9_-]+", "-", ruw).strip("-")
+    return ruw[:40]
+
+
+class FloorplanVoorwerpView(HomeAssistantView):
+    """`PUT /api/floorplan_layout/voorwerp` — één eigen tekening toevoegen.
+
+    De svg-editor draait in een frame naast de 2D-editor. Wat u daar tekent moet in
+    de voorwerpenbibliotheek belanden: het bestand in de map én een regel in het
+    manifest, zodat het meteen in de lijst staat. Dat kan geen enkele browser zelf;
+    dit is de enige weg naar binnen.
+
+    Bewust smal: één map (voorwerpen/gebruiker), alleen svg, een naam met alleen
+    letters en cijfers, en hooguit een halve megabyte. Een tekening met een script
+    of een doctype wordt geweigerd — die heeft een plattegrondtekening niet nodig,
+    en zo kan er niets anders dan een plaatje in de map komen.
+    """
+
+    requires_auth = True
+    url = "/api/floorplan_layout/voorwerp"
+    name = "api:floorplan_layout:voorwerp"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def put(self, request: Any) -> Any:
+        try:
+            gegevens = await request.json()
+        except Exception:  # noqa: BLE001 — geen JSON is een verzoekfout
+            return self.json_message("Er zat geen leesbare JSON in het verzoek.", 400)
+
+        naam = str(gegevens.get("naam") or "").strip()
+        groep = str(gegevens.get("groep") or "Eigen").strip()[:40] or "Eigen"
+        breedte = str(gegevens.get("breedte") or "").strip()
+        svg = str(gegevens.get("svg") or "")
+
+        kem = _voorwerp_id(naam)
+        if not kem or not VOORWERP_NAAM.match(kem):
+            return self.json_message("Kies een naam van 2 tot 40 letters of cijfers.", 400)
+        if not re.match(r"^(100|[1-9][0-9]?(\.[0-9])?)%$", breedte):
+            return self.json_message("De breedte hoort een percentage te zijn, zoals 4%.", 400)
+        if "<!doctype" in svg.lower() or "<script" in svg.lower():
+            return self.json_message(
+                "Een tekening met een script of een doctype wordt niet geaccepteerd.", 400
+            )
+        if "<svg" not in svg.lower():
+            return self.json_message("Dit lijkt geen svg-tekening te zijn.", 400)
+        if len(svg.encode("utf-8")) > MAX_VOORWERP_BYTES:
+            return self.json_message("De tekening is groter dan een halve megabyte.", 400)
+
+        try:
+            await self.hass.async_add_executor_job(self._schrijf, kem, naam, groep, breedte, svg)
+        except OSError as err:
+            return self.json_message(f"Wegschrijven lukte niet: {err}", 500)
+
+        _LOGGER.info(
+            "Eigen voorwerp %s toegevoegd (%d bytes)", kem, len(svg.encode("utf-8"))
+        )
+        return self.json(
+            {
+                "id": kem,
+                "naam": naam,
+                "groep": groep,
+                "breedte": breedte,
+                "pad": f"/local/{VOORWERP_MAP}/{VOORWERP_EIGEN}/{kem}.svg",
+            }
+        )
+
+    def _schrijf(self, kem: str, naam: str, groep: str, breedte: str, svg: str) -> None:
+        """Het bestand neerzetten en het manifest bijwerken (in de executor)."""
+        map_ = _voorwerp_wortel(self.hass) / VOORWERP_EIGEN
+        map_.mkdir(parents=True, exist_ok=True)
+        bestand = map_ / f"{kem}.svg"
+        if bestand.exists():
+            shutil.copy2(bestand, bestand.with_name(bestand.name + ".bak"))
+        atomic_write_bytes(bestand, svg.encode("utf-8"))
+
+        # Eén slot om het lezen-en-terugschrijven van het manifest: twee
+        # gelijktijdige verzoeken mogen elkaars regel niet overschrijven.
+        manifest = _voorwerp_wortel(self.hass) / VOORWERP_MANIFEST
+        regel = {
+            "id": kem,
+            "naam": naam,
+            "groep": groep,
+            "breedte": breedte,
+            "pad": f"/local/{VOORWERP_MAP}/{VOORWERP_EIGEN}/{kem}.svg",
+        }
+        with VOORWERP_LOCK:
+            regels: list[dict[str, Any]] = []
+            if manifest.exists():
+                try:
+                    inhoud = json.loads(manifest.read_text(encoding="utf-8"))
+                    if isinstance(inhoud, list):
+                        regels = [r for r in inhoud if isinstance(r, dict)]
+                except (OSError, ValueError):
+                    regels = []
+            regels = [r for r in regels if r.get("id") != kem]
+            regels.append(regel)
+            if manifest.exists():
+                shutil.copy2(manifest, manifest.with_name(manifest.name + ".bak"))
+            atomic_write_bytes(
+                manifest, json.dumps(regels, ensure_ascii=False, indent=2).encode("utf-8")
+            )
+
+
 def plattegrond_van(hass: HomeAssistant) -> tuple[str, str]:
     """De map en de naam van de plattegrond die deze integratie beheert.
 
@@ -692,6 +819,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     afbeelding = FloorplanAfbeeldingView(hass)
     stored.update({"afbeelding": afbeelding})
     hass.http.register_view(afbeelding)
+
+    # Eigen voorwerpen uit de svg-editor. Net als de plaatjesmap hoort dit bij de
+    # integratie als geheel, niet bij één plattegrond.
+    vorigeVoorwerp = stored.get("voorwerp")
+    if isinstance(vorigeVoorwerp, FloorplanVoorwerpView):
+        _unregister(hass, vorigeVoorwerp)
+    voorwerp = FloorplanVoorwerpView(hass)
+    stored.update({"voorwerp": voorwerp})
+    hass.http.register_view(voorwerp)
 
     # De zonevormen horen bij deze plattegrond (map + naam), dus deze view gaat
     # mee met de layout-view en niet met het algemene plaatjes-endpoint.
