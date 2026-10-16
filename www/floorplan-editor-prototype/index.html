@@ -596,15 +596,25 @@
   #inspector-paneel pre { max-height: 320px; }
   /* De svg-editor in een zwevend frame. Het hangt aan de pagina zelf en niet aan
      de kaart, dus het mag over de menu's en de balken heen; `position: fixed`
-     houdt het op zijn plek als de kaart zelf zou schuiven. Z-index 9950: boven
-     alles wat de kaart tekent (het hoogste daar is 9900), maar onder het
-     bevestigingsvenster (10000) — dat moet er als laatste nog bovenop. */
+     houdt het op zijn plek als de kaart zelf zou schuiven.
+
+     #svg-achter is de laag eronder: zolang dit venster open is, vangt die elke klik
+     en aanraking op, zodat u niet per ongeluk iets in de plattegrond versleept of
+     een knop van de editor erachter indrukt. Z-index 9940 tegenover 9950 voor het
+     venster zelf, en 10000 voor het bevestigingsvenster — dat moet er als laatste
+     nog bovenop, anders kon u een naam niet eens intypen. */
+  #svg-achter {
+    position: fixed; inset: 0; z-index: 9940; background: rgba(0, 0, 0, .35);
+  }
+  #svg-achter.verborgen { display: none; }
   #svg-paneel {
     position: fixed; top: 24px; right: 24px; width: 780px; height: 580px;
     background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
     box-shadow: 0 12px 44px rgba(0, 0, 0, .65); z-index: 9950;
     display: flex; flex-direction: column; overflow: hidden;
   }
+  /* Op de volle maat heeft een rand en een ronde hoek geen zin meer. */
+  #svg-paneel.vol { border-radius: 0; border-color: transparent; box-shadow: none; }
   #svg-paneel.verborgen { display: none; }
   #svg-paneel .kop {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px;
@@ -669,7 +679,7 @@
      plattegrond schuift niet meer naar beneden en terug.
 
      Z-index 9990: boven de plattegrond, het uitklapmenu (700) én het zwevende
-     svg-frame (9950) — een melding hoort ook boven een venster van 90% te blijven
+     svg-frame (9950) — een melding hoort ook boven een venster van vol scherm te blijven
      staan — maar onder het bevestigingsvenster (10000), dat boven alles moet
      blijven. */
   #melding {
@@ -957,10 +967,14 @@
      hele venster vult. Het wordt pas geladen als u het opent, zodat een sessie
      waarin u het niet gebruikt er niets van merkt; daarna blijft het staan, zodat
      uw tekening niet verdwijnt als u het even sluit. -->
+<!-- Zolang dit venster open is, ligt deze laag over de rest van de editor: u bent
+     met de svg-editor bezig, en een klik ernaast hoort niets in de plattegrond te
+     verzetten. Hij ligt eronder, het venster zelf erboven. -->
+<div id="svg-achter" class="verborgen"></div>
 <aside id="svg-paneel" class="verborgen">
   <div class="kop" title="sleep deze titelbalk om het venster te verplaatsen">
     <span>SVG-editor</span>
-    <button id="svg-groot" title="bijna het hele venster vullen (90%) — nog eens klikken maakt het weer klein">⤢ 90%</button>
+    <button id="svg-groot" title="het hele venster vullen — nog eens klikken maakt het weer klein">⤢ volledig scherm</button>
     <button id="svg-bibliotheek" title="de tekening uit de editor in de voorwerpenbibliotheek zetten">Naar de bibliotheek</button>
     <button id="svg-sluit" title="dit venster sluiten (uw tekening blijft in het frame staan)">×</button>
   </div>
@@ -6915,11 +6929,19 @@ paneelPlekTerug();
    in de voorwerpenlijst staat. Dat wegschrijven doet de integratie via
    `PUT /api/floorplan_layout/voorwerp` — een browser mag dat zelf niet doen. */
 
+/* Is de svg-editor open? Dan bedient u dat venster, en niet de editor erachter. */
+function svgOpen() {
+  const p = el("svg-paneel");
+  return !!(p && !p.classList.contains("verborgen"));
+}
+
 function svgZet(open) {
   const p = el("svg-paneel");
-  if (!p) return;
+  const achter = el("svg-achter");
+  if (!p || !achter) return;
   if (!open) {
     p.classList.add("verborgen");
+    achter.classList.add("verborgen");
     return;
   }
   const houder = el("svg-houder");
@@ -6932,19 +6954,21 @@ function svgZet(open) {
     houder.appendChild(f);
   }
   p.classList.remove("verborgen");
+  // De laag eronder: die vangt alles op wat u ernaast zou willen doen.
+  achter.classList.remove("verborgen");
   // Pas ná het openen: een verborgen venster heeft geen afmetingen om te meten.
   svgBinnen();
 }
 el("svg-sluit").onclick = () => svgZet(false);
 
 /* Het venster binnen het beeld houden: kleiner maken als het niet past, en het
-   terugschuiven als het (deels) buiten de rand staat. Wie op 90% staat krijgt
-   hier de 90% van het nieuwe venster. */
+   terugschuiven als het (deels) buiten de rand staat. Wie op vol scherm staat
+   krijgt hier het volle scherm van het nieuwe venster. */
 function svgBinnen() {
   const p = el("svg-paneel");
   if (!p) return;
   if (svgVorig) {
-    svgZetGroot();
+    svgVolScherm();
     return;
   }
   const r = p.getBoundingClientRect();
@@ -7080,24 +7104,23 @@ function maakVrijSleepbaar(paneelId) {
 }
 maakVrijSleepbaar("svg-paneel");
 
-/* Groot maken — 90% van het hele browservenster, gecentreerd, over de menu's en de
-   balken heen — en weer terug. Het oude formaat wordt onthouden, zodat de knop
-   heen en weer schakelt in plaats van te stapelen. */
+/* Vol scherm — het hele browservenster, over de menu's en de balken heen — en weer
+   terug. Het oude formaat wordt onthouden, zodat de knop heen en weer schakelt in
+   plaats van te stapelen. */
 let svgVorig = null;
 
-function svgZetGroot() {
+function svgVolScherm() {
   const p = el("svg-paneel");
   if (!p) return;
-  const breed = Math.round(window.innerWidth * 0.9);
-  const hoog = Math.round(window.innerHeight * 0.9);
   p.style.right = "auto";
-  p.style.left = Math.round((window.innerWidth - breed) / 2) + "px";
-  p.style.top = Math.round((window.innerHeight - hoog) / 2) + "px";
-  p.style.width = breed + "px";
-  p.style.height = hoog + "px";
+  p.style.left = "0px";
+  p.style.top = "0px";
+  p.style.width = window.innerWidth + "px";
+  p.style.height = window.innerHeight + "px";
+  p.classList.add("vol");
 }
 
-function svgGroot() {
+function svgVolledig() {
   const p = el("svg-paneel");
   if (!p) return;
   if (svgVorig) {
@@ -7106,18 +7129,22 @@ function svgGroot() {
     p.style.width = svgVorig.width;
     p.style.height = svgVorig.height;
     p.style.right = svgVorig.right;
+    p.classList.remove("vol");
     svgVorig = null;
     el("svg-groot").classList.remove("aan");
+    // Het oude formaat kan intussen buiten een kleiner venster vallen — dan schuift
+    // hij hier terug binnen beeld in plaats van half buiten de rand te hangen.
+    svgBinnen();
     return;
   }
   svgVorig = {
     left: p.style.left, top: p.style.top,
     width: p.style.width, height: p.style.height, right: p.style.right,
   };
-  svgZetGroot();
+  svgVolScherm();
   el("svg-groot").classList.add("aan");
 }
-el("svg-groot").onclick = () => svgGroot();
+el("svg-groot").onclick = () => svgVolledig();
 
 /* Slepen aan de hoek rechtsonder. Het venster mag tot de rand van het browservenster
    groeien en wordt niet kleiner dan 420 bij 320 — daaronder is er niets meer om in
@@ -7131,9 +7158,10 @@ el("svg-groot").onclick = () => svgGroot();
     ev.stopPropagation();
     const r = p.getBoundingClientRect();
     const begin = { x: ev.clientX, y: ev.clientY, w: r.width, h: r.height };
-    // Een zelf gekozen formaat is geen "groot" meer: de knop gaat weer uit.
+    // Een zelf gekozen formaat is geen vol scherm meer: de knop gaat weer uit.
     if (svgVorig) {
       svgVorig = null;
+      p.classList.remove("vol");
       el("svg-groot").classList.remove("aan");
     }
     try { greep.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
@@ -7157,7 +7185,7 @@ el("svg-groot").onclick = () => svgGroot();
   };
 })();
 
-/* Verandert het browservenster van formaat, dan blijft wie op 90% staat op 90%, en
+/* Verandert het browservenster van formaat, dan blijft vol scherm vol scherm, en
    schuift een zelf gekozen formaat terug binnen beeld in plaats van buiten de rand
    te vallen. */
 function svgVensterMaat() {
@@ -8143,6 +8171,12 @@ el("werkgebied").addEventListener("wheel", ev => {
 }, { passive: false });
 
 document.addEventListener("keydown", ev => {
+  // Staat het svg-venster open, dan bedient u dat venster en niet de editor
+  // erachter: geen h/s om van gereedschap te wisselen, geen pijltjes, en vooral
+  // geen Delete die iets in de plattegrond weghaalt. Wat u in de svg-editor typt
+  // komt hier niet eens aan — dat is een eigen document — maar een toets terwijl de
+  // focus op het venster zelf staat wel.
+  if (svgOpen()) return;
   if (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA" || ev.target.tagName === "SELECT") return;
   // Gereedschap wisselen en de selectie weghalen werken altijd.
   const toets = ev.key.toLowerCase();
