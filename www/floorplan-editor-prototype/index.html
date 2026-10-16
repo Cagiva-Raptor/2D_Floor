@@ -610,6 +610,14 @@
     cursor: move; user-select: none; touch-action: none;
   }
   #svg-paneel .kop > span { flex: 1; font-size: 13px; font-weight: 600; }
+  #svg-paneel .kop button { white-space: nowrap; }
+  #svg-paneel .kop button.aan { background: var(--accent-dim); border-color: var(--accent); }
+  /* De hoek rechtsonder: daarmee sleept u het venster naar elk formaat. */
+  #svg-greep {
+    position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+    cursor: nwse-resize; touch-action: none;
+    background: linear-gradient(135deg, transparent 46%, var(--lijn) 46%);
+  }
   #svg-houder { flex: 1; min-height: 0; }
   #svg-houder iframe { width: 100%; height: 100%; border: 0; display: block; background: #1e1f24; }
   /* De grepen om te schalen en te draaien. Ze zitten ín het element, dus ze
@@ -944,10 +952,12 @@
   <aside id="svg-paneel" class="verborgen">
     <div class="kop" title="sleep deze titelbalk om het venster te verplaatsen">
       <span>SVG-editor</span>
+      <button id="svg-groot" title="bijna het hele scherm gebruiken — nog eens klikken maakt het weer klein">⤢ groot</button>
       <button id="svg-bibliotheek" title="de tekening uit de editor in de voorwerpenbibliotheek zetten">Naar de bibliotheek</button>
       <button id="svg-sluit" title="dit venster sluiten (uw tekening blijft in het frame staan)">×</button>
     </div>
     <div id="svg-houder"></div>
+    <div id="svg-greep" title="sleep om het venster groter of kleiner te maken"></div>
   </aside>
 </main>
 
@@ -7035,6 +7045,78 @@ function maakVrijSleepbaar(paneelId) {
   };
 }
 maakVrijSleepbaar("svg-paneel");
+
+/* Groot maken — bijna het hele scherm — en weer terug. Het oude formaat wordt
+   onthouden, zodat de knop heen en weer schakelt in plaats van te stapelen. */
+let svgVorig = null;
+
+function svgGroot() {
+  const p = el("svg-paneel");
+  const main = document.querySelector("main");
+  if (!p || !main) return;
+  if (svgVorig) {
+    p.style.left = svgVorig.left;
+    p.style.top = svgVorig.top;
+    p.style.width = svgVorig.width;
+    p.style.height = svgVorig.height;
+    p.style.right = svgVorig.right;
+    svgVorig = null;
+    el("svg-groot").classList.remove("aan");
+    return;
+  }
+  svgVorig = {
+    left: p.style.left, top: p.style.top,
+    width: p.style.width, height: p.style.height, right: p.style.right,
+  };
+  const m = main.getBoundingClientRect();
+  const breed = Math.round(m.width * 0.9);
+  const hoog = Math.round(m.height * 0.9);
+  p.style.right = "auto";
+  p.style.left = Math.round((m.width - breed) / 2) + "px";
+  p.style.top = Math.round((m.height - hoog) / 2) + "px";
+  p.style.width = breed + "px";
+  p.style.height = hoog + "px";
+  el("svg-groot").classList.add("aan");
+}
+el("svg-groot").onclick = () => svgGroot();
+
+/* Slepen aan de hoek rechtsonder. Het venster blijft binnen `main` en wordt niet
+   kleiner dan 420 bij 320 — daaronder is er niets meer om in te tekenen. */
+(function maakSvgGreep() {
+  const p = el("svg-paneel");
+  const greep = el("svg-greep");
+  const main = document.querySelector("main");
+  if (!p || !greep || !main) return;
+  greep.onpointerdown = ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const m = main.getBoundingClientRect();
+    const r = p.getBoundingClientRect();
+    const begin = { x: ev.clientX, y: ev.clientY, w: r.width, h: r.height };
+    // Een zelf gekozen formaat is geen "groot" meer: de knop gaat weer uit.
+    if (svgVorig) {
+      svgVorig = null;
+      el("svg-groot").classList.remove("aan");
+    }
+    try { greep.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
+    const beweeg = e2 => {
+      const maxW = m.width - (r.left - m.left);
+      const maxH = m.height - (r.top - m.top);
+      const w = Math.min(maxW, Math.max(420, begin.w + (e2.clientX - begin.x)));
+      const h = Math.min(maxH, Math.max(320, begin.h + (e2.clientY - begin.y)));
+      p.style.width = Math.round(w) + "px";
+      p.style.height = Math.round(h) + "px";
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", beweeg);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", beweeg);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+})();
 
 /* Een foto van uw computer naar de plaatjesmap van Home Assistant.
 
