@@ -1,0 +1,3 @@
+[submodule "www/svg-editor"]
+	path = www/svg-editor
+	url = https://github.com/Cagiva-Raptor/svg-editor.git

@@ -4,6 +4,11 @@
 # buiten deze witlijst.
 *
 !.gitignore
+!.gitmodules
+
+# --- de svg-editor (git-submodule van Cagiva-Raptor/svg-editor) ---
+!www/
+!www/svg-editor
 
 # --- de editor ---
 !www/
