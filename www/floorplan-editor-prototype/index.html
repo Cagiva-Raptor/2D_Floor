@@ -4814,6 +4814,37 @@ function metRotatie(transform, graden) {
   return metTransform(transform, graden, s.x, s.y);
 }
 
+/* Een element dupliceren: dezelfde vorm, een stukje opgeschoven zodat u hem
+   meteen ziet staan. Werkt voor losse elementen én voor elementen in een
+   voorwaarde — het kopieert zich dan op dezelfde plek in die voorwaarde. */
+function dupliceer(e) {
+  const i = STAAT.tak.get(e);
+  const ouder = (i && i.ouder) || null;
+  const lijst = ouder ? ouder.elements : (STAAT.kaart && STAAT.kaart.elements);
+  if (!Array.isArray(lijst) || !lijst.includes(e)) {
+    meld("Dit element staat niet rechtstreeks in de kaart — kan niet dupliceren.", "fout");
+    return null;
+  }
+  onthoud();
+  const k = JSON.parse(JSON.stringify(e));
+  // 4% opschuiven: genoeg om het verschil te zien, klein genoeg om het meteen weer
+  // te verschuiven. Buiten de kaart blijven.
+  const st = k.style || (k.style = {});
+  const l = parseFloat(st.left);
+  const t = parseFloat(st.top);
+  if (isFinite(l)) st.left = Math.min(98, Math.max(0, Math.round((l + 4) * 100) / 100)) + "%";
+  if (isFinite(t)) st.top = Math.min(98, Math.max(0, Math.round((t + 4) * 100) / 100)) + "%";
+  lijst.splice(lijst.indexOf(e) + 1, 0, k);
+  bouwStaats();
+  tekenAlles();
+  tekenZoeklijst();
+  selecteer(k);
+  meld(`Gedupliceerd${ouder ? " in dezelfde voorwaarde" : ""}: ${naamVan(k)}` +
+       (isFinite(l) || isFinite(t) ? ` — nu op ${st.left} / ${st.top}` : "") +
+       `. Uw selectie staat op de kopie. ↶ draait het terug.`, "serieus");
+  return k;
+}
+
 /* Een element — of een hele selectie — achter de entiteiten zetten: het schuift
    in de lijst naar voren tot vóór het eerste element met een entiteit. Hun
    onderlinge volgorde blijft daarbij bewaard. */
@@ -4844,6 +4875,11 @@ function elementMenuItems(e) {
   return [
     ...voorwaardeMenuItems(e),
     { scheiding: true },
+    {
+      tekst: "Dupliceren",
+      uitleg: "een kopie van dit element, 4% naar rechtsonder — meteen verschuiven, schalen of voorwaarden geven",
+      doe: () => dupliceer(e),
+    },
     {
       tekst: "Schaal",
       uitleg: "handvatten om breder, hoger of allebei te maken — met shift blijft de verhouding gelijk",
@@ -5609,6 +5645,24 @@ function verdiepDataOphalen() {
 function tekenZoeklijst() {
   const zoek = el("zoek-entiteit").value.trim().toLowerCase();
   const keuze = el("lijst-entiteiten");
+  // Wat er geselecteerd was en hoe ver u door de lijst was, bewaren: dit venster
+  // wordt opnieuw opgebouwd (na het toevoegen van iets, na het verversen, …), en
+  // zonder dit sprong hij na elke toevoeging terug naar de eerste regel — precies
+  // op het moment dat u net iets had neergezet.
+  const vroeger = keuze.value;
+  const vroegerScroll = keuze.scrollTop;
+  const zetTerug = () => {
+    if (keuze.options.length) {
+      const terug = [...keuze.options].findIndex(o => o.value === vroeger);
+      keuze.selectedIndex = terug >= 0 ? terug : 0;
+    }
+    keuze.scrollTop = vroegerScroll;
+    // De browser kan ná dit de geselecteerde regel alsnog in beeld schuiven — en
+    // dan stond de lijst weer bovenaan. Nog een keer na de tekenbeurt, en nog eens
+    // kort daarna, want die herstelbeurt volgt op de tekenbeurt.
+    requestAnimationFrame(() => { keuze.scrollTop = vroegerScroll; });
+    setTimeout(() => { keuze.scrollTop = vroegerScroll; }, 80);
+  };
   const ongebruikt = el("toon-ongebruikt").checked;
   const opVerdiep = el("toon-verdiep").checked;
   // De koppeling die u zelf in het ⚙-venster van dit verdiep heeft neergezet:
@@ -5660,7 +5714,7 @@ function tekenZoeklijst() {
         ? "niets gevonden" : "de voorwerpenlijst kon niet geladen worden";
       keuze.appendChild(o);
     }
-    keuze.selectedIndex = 0;
+    zetTerug();
     keuze.onchange = () => kiesUitLijst();
     kiesUitLijst();
     return;
@@ -5709,7 +5763,7 @@ function tekenZoeklijst() {
   // voorselectie, en dan zegt Toevoegen "kies eerst een entity" terwijl er
   // maar één keuze zichtbaar is. Dat is precies de ergernis die we hier weg
   // willen hebben.
-  if (zichtbaar.length) keuze.selectedIndex = 0;
+  zetTerug();
   keuze.onchange = () => kiesUitLijst();
   kiesUitLijst();
 }
