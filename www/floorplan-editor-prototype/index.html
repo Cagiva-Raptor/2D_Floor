@@ -594,13 +594,15 @@
   }
   #inspector-paneel .tabpaneel.verborgen { display: none; }
   #inspector-paneel pre { max-height: 320px; }
-  /* De svg-editor in een zwevend frame, net als de inspectie: hij hangt aan
-     `main`, dus nooit over het menu, en hij is aan zijn titelbalk te verslepen. */
+  /* De svg-editor in een zwevend frame. Het hangt aan de pagina zelf en niet aan
+     de kaart, dus het mag over de menu's en de balken heen; `position: fixed`
+     houdt het op zijn plek als de kaart zelf zou schuiven. Z-index 9950: boven
+     alles wat de kaart tekent (het hoogste daar is 9900), maar onder het
+     bevestigingsvenster (10000) — dat moet er als laatste nog bovenop. */
   #svg-paneel {
-    position: absolute; top: 8px; right: 360px; width: 780px; height: 580px;
-    max-width: calc(100% - 24px); max-height: calc(100% - 16px);
+    position: fixed; top: 24px; right: 24px; width: 780px; height: 580px;
     background: var(--paneel); border: 1px solid var(--lijn); border-radius: 6px;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, .55); z-index: 70;
+    box-shadow: 0 12px 44px rgba(0, 0, 0, .65); z-index: 9950;
     display: flex; flex-direction: column; overflow: hidden;
   }
   #svg-paneel.verborgen { display: none; }
@@ -666,10 +668,12 @@
      venster ligt — aankomen en weggaan veranderen de indeling niet, en de
      plattegrond schuift niet meer naar beneden en terug.
 
-     Z-index 900: boven de plattegrond en het uitklapmenu (700), maar onder het
-     bevestigingsvenster (10000), dat boven alles moet blijven. */
+     Z-index 9990: boven de plattegrond, het uitklapmenu (700) én het zwevende
+     svg-frame (9950) — een melding hoort ook boven een venster van 90% te blijven
+     staan — maar onder het bevestigingsvenster (10000), dat boven alles moet
+     blijven. */
   #melding {
-    position: fixed; right: 16px; bottom: 16px; z-index: 900;
+    position: fixed; right: 16px; bottom: 16px; z-index: 9990;
     max-width: min(520px, calc(100vw - 32px));
     padding: 8px 12px; font-size: 12.5px; background: #16324a;
     color: #cfe4f7; border: 1px solid var(--lijn); border-radius: 8px;
@@ -946,20 +950,23 @@
       <pre id="yaml" class="leeg">—</pre>
     </div>
   </aside>
-  <!-- De svg-editor in een zwevend frame. Hij wordt pas geladen als u hem opent,
-       zodat een sessie waarin u hem niet gebruikt er niets van merkt; daarna
-       blijft hij staan, zodat uw tekening niet verdwijnt als u hem even dichtdoet. -->
-  <aside id="svg-paneel" class="verborgen">
-    <div class="kop" title="sleep deze titelbalk om het venster te verplaatsen">
-      <span>SVG-editor</span>
-      <button id="svg-groot" title="bijna het hele scherm gebruiken — nog eens klikken maakt het weer klein">⤢ groot</button>
-      <button id="svg-bibliotheek" title="de tekening uit de editor in de voorwerpenbibliotheek zetten">Naar de bibliotheek</button>
-      <button id="svg-sluit" title="dit venster sluiten (uw tekening blijft in het frame staan)">×</button>
-    </div>
-    <div id="svg-houder"></div>
-    <div id="svg-greep" title="sleep om het venster groter of kleiner te maken"></div>
-  </aside>
 </main>
+
+<!-- De svg-editor in een zwevend frame. Het hangt aan de pagina zelf, niet aan de
+     kaart, zodat het over de menu's en de balken heen mag — en op verzoek bijna het
+     hele venster vult. Het wordt pas geladen als u het opent, zodat een sessie
+     waarin u het niet gebruikt er niets van merkt; daarna blijft het staan, zodat
+     uw tekening niet verdwijnt als u het even sluit. -->
+<aside id="svg-paneel" class="verborgen">
+  <div class="kop" title="sleep deze titelbalk om het venster te verplaatsen">
+    <span>SVG-editor</span>
+    <button id="svg-groot" title="bijna het hele venster vullen (90%) — nog eens klikken maakt het weer klein">⤢ 90%</button>
+    <button id="svg-bibliotheek" title="de tekening uit de editor in de voorwerpenbibliotheek zetten">Naar de bibliotheek</button>
+    <button id="svg-sluit" title="dit venster sluiten (uw tekening blijft in het frame staan)">×</button>
+  </div>
+  <div id="svg-houder"></div>
+  <div id="svg-greep" title="sleep om het venster groter of kleiner te maken"></div>
+</aside>
 
 <script>
 "use strict";
@@ -6911,20 +6918,46 @@ paneelPlekTerug();
 function svgZet(open) {
   const p = el("svg-paneel");
   if (!p) return;
-  if (open) {
-    const houder = el("svg-houder");
-    if (houder && !houder.querySelector("iframe")) {
-      const f = document.createElement("iframe");
-      // Met een tijdstempel, zodat de browser een bijgewerkte editor ophaalt in
-      // plaats van de versie die hij nog kent.
-      f.src = `/local/svg-editor/index.html?t=${Date.now()}`;
-      f.title = "SVG-editor";
-      houder.appendChild(f);
-    }
+  if (!open) {
+    p.classList.add("verborgen");
+    return;
   }
-  p.classList.toggle("verborgen", !open);
+  const houder = el("svg-houder");
+  if (houder && !houder.querySelector("iframe")) {
+    const f = document.createElement("iframe");
+    // Met een tijdstempel, zodat de browser een bijgewerkte editor ophaalt in
+    // plaats van de versie die hij nog kent.
+    f.src = `/local/svg-editor/index.html?t=${Date.now()}`;
+    f.title = "SVG-editor";
+    houder.appendChild(f);
+  }
+  p.classList.remove("verborgen");
+  // Pas ná het openen: een verborgen venster heeft geen afmetingen om te meten.
+  svgBinnen();
 }
 el("svg-sluit").onclick = () => svgZet(false);
+
+/* Het venster binnen het beeld houden: kleiner maken als het niet past, en het
+   terugschuiven als het (deels) buiten de rand staat. Wie op 90% staat krijgt
+   hier de 90% van het nieuwe venster. */
+function svgBinnen() {
+  const p = el("svg-paneel");
+  if (!p) return;
+  if (svgVorig) {
+    svgZetGroot();
+    return;
+  }
+  const r = p.getBoundingClientRect();
+  const breed = Math.min(r.width, window.innerWidth);
+  const hoog = Math.min(r.height, window.innerHeight);
+  p.style.right = "auto";
+  p.style.width = Math.round(breed) + "px";
+  p.style.height = Math.round(hoog) + "px";
+  p.style.left =
+    Math.round(Math.min(Math.max(0, r.left), Math.max(0, window.innerWidth - breed))) + "px";
+  p.style.top =
+    Math.round(Math.min(Math.max(0, r.top), Math.max(0, window.innerHeight - hoog))) + "px";
+}
 el("knop-svgeditor").onclick = () =>
   svgZet(el("svg-paneel").classList.contains("verborgen"));
 
@@ -7007,33 +7040,34 @@ async function svgNaarBibliotheek() {
 }
 el("svg-bibliotheek").onclick = () => svgNaarBibliotheek();
 
-/* Het frame aan zijn titelbalk verslepen, binnen `main` — dus nooit over het menu
-   en nooit half buiten beeld. */
+/* Een zwevend venster aan zijn titelbalk verslepen, vrij over het hele
+   browservenster — ook over de menu's en de balken. Alleen half buiten beeld
+   schuiven kan niet. */
 function maakVrijSleepbaar(paneelId) {
   const p = el(paneelId);
-  const main = document.querySelector("main");
   const kop = p && p.querySelector(".kop");
-  if (!p || !main || !kop) return;
+  if (!p || !kop) return;
   const klem = (l, t) => {
-    const m = main.getBoundingClientRect();
     const breed = p.offsetWidth;
-    const hoog = Math.min(p.offsetHeight, m.height);
+    const hoog = Math.min(p.offsetHeight, window.innerHeight);
     p.style.right = "auto";
-    p.style.left = Math.round(Math.min(Math.max(0, l), Math.max(0, m.width - breed))) + "px";
-    p.style.top = Math.round(Math.min(Math.max(0, t), Math.max(0, m.height - hoog))) + "px";
+    p.style.left =
+      Math.round(Math.min(Math.max(0, l), Math.max(0, window.innerWidth - breed))) + "px";
+    p.style.top =
+      Math.round(Math.min(Math.max(0, t), Math.max(0, window.innerHeight - hoog))) + "px";
   };
   kop.onpointerdown = ev => {
     if (ev.target.closest("button")) return;
     ev.preventDefault();
-    const m = main.getBoundingClientRect();
+    // Het venster staat met `position: fixed`, dus de muisaanwijzer en het venster
+    // zijn in dezelfde coördinaten: geen omrekening nodig.
     const r = p.getBoundingClientRect();
     const greep = { x: ev.clientX - r.left, y: ev.clientY - r.top };
     p.style.right = "auto";
-    p.style.left = (r.left - m.left) + "px";
-    p.style.top = (r.top - m.top) + "px";
+    p.style.left = Math.round(r.left) + "px";
+    p.style.top = Math.round(r.top) + "px";
     try { kop.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
-    const beweeg = e2 =>
-      klem(e2.clientX - greep.x - m.left, e2.clientY - greep.y - m.top);
+    const beweeg = e2 => klem(e2.clientX - greep.x, e2.clientY - greep.y);
     const stop = () => {
       window.removeEventListener("pointermove", beweeg);
       window.removeEventListener("pointerup", stop);
@@ -7046,14 +7080,26 @@ function maakVrijSleepbaar(paneelId) {
 }
 maakVrijSleepbaar("svg-paneel");
 
-/* Groot maken — bijna het hele scherm — en weer terug. Het oude formaat wordt
-   onthouden, zodat de knop heen en weer schakelt in plaats van te stapelen. */
+/* Groot maken — 90% van het hele browservenster, gecentreerd, over de menu's en de
+   balken heen — en weer terug. Het oude formaat wordt onthouden, zodat de knop
+   heen en weer schakelt in plaats van te stapelen. */
 let svgVorig = null;
+
+function svgZetGroot() {
+  const p = el("svg-paneel");
+  if (!p) return;
+  const breed = Math.round(window.innerWidth * 0.9);
+  const hoog = Math.round(window.innerHeight * 0.9);
+  p.style.right = "auto";
+  p.style.left = Math.round((window.innerWidth - breed) / 2) + "px";
+  p.style.top = Math.round((window.innerHeight - hoog) / 2) + "px";
+  p.style.width = breed + "px";
+  p.style.height = hoog + "px";
+}
 
 function svgGroot() {
   const p = el("svg-paneel");
-  const main = document.querySelector("main");
-  if (!p || !main) return;
+  if (!p) return;
   if (svgVorig) {
     p.style.left = svgVorig.left;
     p.style.top = svgVorig.top;
@@ -7068,29 +7114,21 @@ function svgGroot() {
     left: p.style.left, top: p.style.top,
     width: p.style.width, height: p.style.height, right: p.style.right,
   };
-  const m = main.getBoundingClientRect();
-  const breed = Math.round(m.width * 0.9);
-  const hoog = Math.round(m.height * 0.9);
-  p.style.right = "auto";
-  p.style.left = Math.round((m.width - breed) / 2) + "px";
-  p.style.top = Math.round((m.height - hoog) / 2) + "px";
-  p.style.width = breed + "px";
-  p.style.height = hoog + "px";
+  svgZetGroot();
   el("svg-groot").classList.add("aan");
 }
 el("svg-groot").onclick = () => svgGroot();
 
-/* Slepen aan de hoek rechtsonder. Het venster blijft binnen `main` en wordt niet
-   kleiner dan 420 bij 320 — daaronder is er niets meer om in te tekenen. */
+/* Slepen aan de hoek rechtsonder. Het venster mag tot de rand van het browservenster
+   groeien en wordt niet kleiner dan 420 bij 320 — daaronder is er niets meer om in
+   te tekenen. */
 (function maakSvgGreep() {
   const p = el("svg-paneel");
   const greep = el("svg-greep");
-  const main = document.querySelector("main");
-  if (!p || !greep || !main) return;
+  if (!p || !greep) return;
   greep.onpointerdown = ev => {
     ev.preventDefault();
     ev.stopPropagation();
-    const m = main.getBoundingClientRect();
     const r = p.getBoundingClientRect();
     const begin = { x: ev.clientX, y: ev.clientY, w: r.width, h: r.height };
     // Een zelf gekozen formaat is geen "groot" meer: de knop gaat weer uit.
@@ -7100,8 +7138,9 @@ el("svg-groot").onclick = () => svgGroot();
     }
     try { greep.setPointerCapture(ev.pointerId); } catch (_) { /* zonder */ }
     const beweeg = e2 => {
-      const maxW = m.width - (r.left - m.left);
-      const maxH = m.height - (r.top - m.top);
+      // Tot aan de rand van het venster, niet verder.
+      const maxW = window.innerWidth - r.left;
+      const maxH = window.innerHeight - r.top;
       const w = Math.min(maxW, Math.max(420, begin.w + (e2.clientX - begin.x)));
       const h = Math.min(maxH, Math.max(320, begin.h + (e2.clientY - begin.y)));
       p.style.width = Math.round(w) + "px";
@@ -7117,6 +7156,35 @@ el("svg-groot").onclick = () => svgGroot();
     window.addEventListener("pointercancel", stop);
   };
 })();
+
+/* Verandert het browservenster van formaat, dan blijft wie op 90% staat op 90%, en
+   schuift een zelf gekozen formaat terug binnen beeld in plaats van buiten de rand
+   te vallen. */
+function svgVensterMaat() {
+  const p = el("svg-paneel");
+  if (!p || p.classList.contains("verborgen")) return;
+  svgBinnen();
+}
+window.addEventListener("resize", () => {
+  svgVensterMaat();
+  // En nog eens na de herindeling: een browser meldt het nieuwe formaat soms een
+  // tel voordat hij het zelf weet, en dan zou het venster op de oude maat blijven.
+  window.requestAnimationFrame(svgVensterMaat);
+});
+
+/* En een kleine controle op de maat van het venster. De melding hierboven doet
+   hetzelfde, maar niet elke browser stuurt die door — een editor die zelf in een
+   frame of een zijpaneel zit krijgt hem soms niet — en dan zou het venster op de
+   oude maat blijven staan. Zolang er niets verandert kost dit niets: het kijkt
+   alleen of de maat nog dezelfde is. */
+let svgVensterW = window.innerWidth;
+let svgVensterH = window.innerHeight;
+window.setInterval(() => {
+  if (window.innerWidth === svgVensterW && window.innerHeight === svgVensterH) return;
+  svgVensterW = window.innerWidth;
+  svgVensterH = window.innerHeight;
+  svgVensterMaat();
+}, 500);
 
 /* Een foto van uw computer naar de plaatjesmap van Home Assistant.
 
