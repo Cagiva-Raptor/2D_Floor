@@ -6985,15 +6985,82 @@ function svgBinnen() {
 el("knop-svgeditor").onclick = () =>
   svgZet(el("svg-paneel").classList.contains("verborgen"));
 
-/* De tekening uit het frame halen. De svg-editor toont de tekening in een
-   tekstvak; dat ene tekstvak met een `<svg>` erin is wat we willen hebben. */
+/* De tekening uit het frame halen.
+
+   De svg-editor tekent in een eigen svg-element in zijn eigen document (#stage), en
+   niet in een tekstvak — dat vak is er alleen om broncode te plakken, en is dus leeg
+   als u gewoon getekend hebt. We nemen het tekenvlak over zoals het daar staat: de
+   laag met selectiehulpjes staat ernaast en gaat dus niet mee, en de ids die alleen
+   voor het scherm zijn gaan eruit.
+
+   En we snijden het kader bij op de tekening zelf. Anders is elk eigen voorwerp een
+   groot leeg vlak met ergens een klein tekeningetje in, en valt het op de plattegrond
+   veel te klein uit. */
 function svgUitFrame() {
   const houder = el("svg-houder");
   const f = houder && houder.querySelector("iframe");
-  let doc = null;
-  try { doc = f && f.contentDocument; } catch (_) { return ""; }
-  if (!doc) return "";
-  const metSvg = [...doc.querySelectorAll("textarea")]
+  let w = null;
+  let d = null;
+  try {
+    w = f && f.contentWindow;
+    d = f && f.contentDocument;
+  } catch (_) { return ""; }
+  if (!w || !d || !d.getElementById) return "";
+  const stage = d.getElementById("stage");
+  if (!stage) return svgUitTekstvak(d);
+
+  const inhoud = d.getElementById("content");
+  // Niets getekend? Dan is er ook niets om te bewaren. Dit meten we aan de omtrek
+  // van de tekening, niet aan een lijst: zo blijft het kloppen ook als de editor
+  // zijn vormpjes ergens anders neerzet.
+  let kader = null;
+  try {
+    kader = (inhoud || stage).getBBox();
+  } catch (_) { kader = null; }
+  if (kader && (kader.width === 0 || kader.height === 0)) return "";
+
+  // Het kader van het document zelf, en anders het kader om de tekening heen.
+  const delen = (stage.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+  let vx = Number.isFinite(delen[0]) ? delen[0] : 0;
+  let vy = Number.isFinite(delen[1]) ? delen[1] : 0;
+  let vw = Number.isFinite(delen[2]) && delen[2] > 0 ? delen[2] : 800;
+  let vh = Number.isFinite(delen[3]) && delen[3] > 0 ? delen[3] : 600;
+  if (kader && kader.width > 0 && kader.height > 0) {
+    // Een beetje lucht: de lijndikte valt buiten de gemeten omtrek, en de rand van
+    // de tekening hoort er niet afgesneden te worden.
+    const marge = Math.max(1, Math.max(kader.width, kader.height) * 0.03);
+    vx = kader.x - marge;
+    vy = kader.y - marge;
+    vw = kader.width + marge * 2;
+    vh = kader.height + marge * 2;
+  }
+  const mooi = n => String(Math.round(n * 100) / 100);
+
+  const kloon = stage.cloneNode(true);
+  kloon.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  kloon.setAttribute("width", mooi(vw));
+  kloon.setAttribute("height", mooi(vh));
+  kloon.setAttribute("viewBox", `${mooi(vx)} ${mooi(vy)} ${mooi(vw)} ${mooi(vh)}`);
+  kloon.removeAttribute("id");
+  const c = kloon.querySelector("#content");
+  if (c) c.removeAttribute("id");
+  const df = kloon.querySelector("#stage-defs");
+  if (df) df.removeAttribute("id");
+  kloon.querySelectorAll("[data-id]").forEach(n => n.removeAttribute("data-id"));
+
+  let tekst = "";
+  try {
+    tekst = new (w.XMLSerializer || XMLSerializer)().serializeToString(kloon);
+  } catch (_) { return svgUitTekstvak(d); }
+  if (!/<svg[\s>]/i.test(tekst)) return svgUitTekstvak(d);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${tekst}`;
+}
+
+/* Als laatste redmiddel: een tekstvak met broncode erin. Dat is het vak waarin u een
+   svg kunt plakken — staat daar iets in, dan is dat de tekening. */
+function svgUitTekstvak(d) {
+  if (!d || !d.querySelectorAll) return "";
+  const metSvg = [...d.querySelectorAll("textarea")]
     .filter(t => /<svg[\s>]/i.test(t.value || ""));
   if (!metSvg.length) return "";
   metSvg.sort((a, b) => (b.value || "").length - (a.value || "").length);
