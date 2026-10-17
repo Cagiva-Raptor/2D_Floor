@@ -44,6 +44,11 @@
 !custom_components/floorplan_layout/logo_2dfloorplan.png
 !custom_components/floorplan_layout/logo_2dfloorplan.jpeg
 
+# --- de svg-conversie (afbeelding naar svg voor de svg-editor) ---
+!custom_components/svg_convert/
+!custom_components/svg_convert/*.py
+!custom_components/svg_convert/manifest.json
+
 # --- de kaartmodule ---
 !floorplan/
 !floorplan/2d-floorplan.js

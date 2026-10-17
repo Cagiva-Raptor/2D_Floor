@@ -1,0 +1,11 @@
+{
+  "domain": "svg_convert",
+  "name": "SVG Convert",
+  "version": "1.0.0",
+  "codeowners": ["@Cagiva-Raptor"],
+  "documentation": "https://github.com/Cagiva-Raptor/2D_Floor",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "dependencies": ["http"],
+  "requirements": ["vtracer==0.6.15"]
+}
