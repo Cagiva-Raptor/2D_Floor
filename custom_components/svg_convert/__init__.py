@@ -57,17 +57,42 @@ class SvgConvertView(HomeAssistantView):
         self._slot = asyncio.Lock()
 
     async def post(self, request: web.Request) -> web.Response:
+        # Home Assistant staat standaard 16 MiB per verzoek toe en sluit de verbinding
+        # zodra er meer aankomt — de browser laat dan alleen "Failed to fetch" zien,
+        # zonder enige uitleg. HA's eigen uploadplekken (profielfoto, media) zetten die
+        # grens per verzoek hoger. Dat doen we hier ook, met ruimte boven onze eigen
+        # grens, zodat een te grote afbeelding netjes gelezen en geweigerd kan worden.
+        request._client_max_size = MAX_BYTES * 2  # noqa: SLF001
+
         lengte = int(request.headers.get("Content-Length") or 0)
         if lengte > MAX_BYTES:
+            # De rest van het verzoek eerst inlezen. Zonder dat sluit de verbinding
+            # halverwege en ziet de editor alleen "Failed to fetch" in plaats van onze
+            # uitleg.
+            try:
+                await request.read()
+            except Exception:  # noqa: BLE001 — het maakt niet meer uit wat er misgaat
+                pass
+            _LOGGER.error(
+                "Afbeelding van %d bytes geweigerd op /convert (maximum %d)",
+                lengte,
+                MAX_BYTES,
+            )
             return self.json_message(
                 "De afbeelding is te groot: maximaal "
                 f"{MAX_BYTES // 1024 // 1024} MB.",
                 413,
             )
+
         data = await request.read()
         if not data:
             return self.json_message("Er zat geen afbeelding in het verzoek.", 400)
         if len(data) > MAX_BYTES:
+            _LOGGER.error(
+                "Afbeelding van %d bytes geweigerd op /convert (maximum %d)",
+                len(data),
+                MAX_BYTES,
+            )
             return self.json_message(
                 "De afbeelding is te groot: maximaal "
                 f"{MAX_BYTES // 1024 // 1024} MB.",

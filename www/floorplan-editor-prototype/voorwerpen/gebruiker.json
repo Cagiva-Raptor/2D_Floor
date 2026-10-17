@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "toilet--jdts",
+    "naam": "Toilet (jdts)",
+    "groep": "Badkamer",
+    "breedte": "4%",
+    "pad": "/local/floorplan-editor-prototype/voorwerpen/gebruiker/toilet--jdts.svg"
+  }
+]
