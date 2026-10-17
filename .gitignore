@@ -49,6 +49,10 @@
 !custom_components/svg_convert/*.py
 !custom_components/svg_convert/manifest.json
 
+# --- de patch voor de svg-editor: klaar om in de submodule te zetten ---
+!www/floorplan-editor-prototype/svg-editor-patch/
+!www/floorplan-editor-prototype/svg-editor-patch/*
+
 # --- de kaartmodule ---
 !floorplan/
 !floorplan/2d-floorplan.js
