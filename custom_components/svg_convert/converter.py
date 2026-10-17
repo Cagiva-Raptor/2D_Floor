@@ -12,8 +12,15 @@ in `__init__.py` klein.
 from __future__ import annotations
 
 from typing import Any
+import json
 import os
+import subprocess
+import sys
 import tempfile
+
+# Hoe lang één conversie mag duren voordat we hem afbreken. Een flinke foto doet er
+# een paar seconden over; dit is alleen een vangnet tegen een proces dat blijft hangen.
+TIJDSLIMIET = 180
 
 # De presets, overgenomen uit de serve.py van de svg-editor (B&W / Poster / Photo).
 PRESETS: dict[str, dict[str, Any]] = {
@@ -96,13 +103,13 @@ def converteer(
 ) -> str:
     """De afbeelding omzetten naar svg-tekst.
 
-    Gooit `ConversieFout` als het niet lukt. Dat kan ook een paniek van de Rust-kant
-    zijn, en dat is een BaseException — vandaar de brede vang hieronder.
+    Gooit `ConversieFout` als het niet lukt — ook als de native code van vtracer
+    eronder door gaat. Die conversie gebeurt daarom in een eigen proces; zie
+    `_laat_omzetten` hieronder.
     """
-    try:
-        import vtracer
-    except ImportError as fout:  # het pakket hoort Home Assistant zelf te installeren
-        raise ConversieFout("het pakket vtracer is niet geïnstalleerd") from fout
+    vorm = _extensie(data, content_type)
+    if vorm is None:
+        raise ConversieFout("dit lijkt geen afbeelding te zijn")
 
     params: dict[str, Any] = dict(PRESETS.get(preset, PRESETS["poster"]))
     for sleutel, waarde in (extra or {}).items():
@@ -110,19 +117,57 @@ def converteer(
             params[sleutel] = waarde
 
     with tempfile.TemporaryDirectory() as werkmap:
-        vorm = _extensie(data, content_type)
-        if vorm is None:
-            raise ConversieFout("dit lijkt geen afbeelding te zijn")
         bron = os.path.join(werkmap, "in" + vorm)
         doel = os.path.join(werkmap, "uit.svg")
         with open(bron, "wb") as bestand:
             bestand.write(data)
-        try:
-            vtracer.convert_image_to_svg_py(bron, doel, **params)
-        except BaseException as fout:  # noqa: BLE001 — pyo3-panieken zijn BaseException
-            raise ConversieFout(str(fout) or fout.__class__.__name__) from fout
+        _laat_omzetten(bron, doel, params)
         try:
             with open(doel, encoding="utf-8") as bestand:
                 return bestand.read()
         except OSError as fout:
             raise ConversieFout(f"er is geen uitvoer geschreven: {fout}") from fout
+
+
+def _laat_omzetten(bron: str, doel: str, params: dict[str, Any]) -> None:
+    """De conversie in een eigen proces laten doen.
+
+    vtracer is een stuk native code. Op deze installatie nam een crash daarin het hele
+    proces mee: Home Assistant viel om (de Supervisor zag "exited with code 139", een
+    segfault) en de browser hield er alleen "Failed to fetch" aan over. In een eigen
+    proces blijft dat beperkt tot een mislukte conversie — en houdt het ons de reden.
+    """
+    klem = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_omzetten.py")
+    try:
+        uitkomst = subprocess.run(
+            [sys.executable, klem, bron, doel, json.dumps(params)],
+            capture_output=True,
+            timeout=TIJDSLIMIET,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as fout:
+        raise ConversieFout(
+            f"de conversie duurde langer dan {TIJDSLIMIET} seconden"
+        ) from fout
+    except OSError as fout:
+        raise ConversieFout(f"het conversieproces kon niet starten: {fout}") from fout
+
+    if uitkomst.returncode == 0:
+        return
+
+    uitleg = (uitkomst.stderr or b"").decode("utf-8", "replace").strip()
+    laatste = " | ".join(uitleg.splitlines()[-3:]) if uitleg else "geen uitleg"
+    # Met welke Python dit draait, en of de GIL aan staat. Dat klinkt technisch, maar
+    # het is precies het verschil dat een kant-en-klaar pakket als vtracer wel of niet
+    # verdraagt — en zonder dit erbij is een crash van buitenaf niet te plaatsen.
+    omgeving = f"python {sys.version.split()[0]}"
+    if hasattr(sys, "_is_gil_enabled"):
+        omgeving += f", gil {'aan' if sys._is_gil_enabled() else 'uit'}"
+    if uitkomst.returncode < 0:
+        raise ConversieFout(
+            f"de conversie is afgebroken met signaal {-uitkomst.returncode} "
+            f"({laatste}; {omgeving})"
+        )
+    raise ConversieFout(
+        f"de conversie stopte met code {uitkomst.returncode} ({laatste}; {omgeving})"
+    )

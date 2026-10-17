@@ -115,7 +115,10 @@ class SvgConvertView(HomeAssistantView):
                     converteer, data, preset, soort, extra
                 )
         except ConversieFout as fout:
-            _LOGGER.warning(
+            # Op error-niveau, niet op waarschuwing: de logger van deze installatie
+            # staat op "default: error", dus een waarschuwing zou onzichtbaar zijn —
+            # en juist hier wil je kunnen zien wat er misging.
+            _LOGGER.error(
                 "Afbeelding omzetten naar svg mislukt (preset %s, %d bytes): %s",
                 preset,
                 len(data),
