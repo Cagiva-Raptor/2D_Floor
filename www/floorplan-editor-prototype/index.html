@@ -5972,7 +5972,10 @@ function voegVoorwerpToe(id, positie) {
   const v = voorwerpVan(id);
   if (!v) { meld("Kies eerst een voorwerp.", "fout"); return null; }
   const stijl = voorwerpStijl();
-  if (!(v.stijlen || []).includes(stijl)) {
+  // Een eigen voorwerp (uit de svg-editor) heeft één bestand en dus geen stijlen: dat
+  // is in elke stijl hetzelfde plaatje. Alleen voor de gegenereerde voorwerpen moet er
+  // een versie in de gekozen stijl bestaan.
+  if (!v.pad && !(v.stijlen || []).includes(stijl)) {
     meld(`"${v.naam}" heeft geen versie in die stijl — kies een andere stijl.`, "fout");
     return null;
   }
